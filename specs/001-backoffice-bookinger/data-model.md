@@ -10,8 +10,7 @@ sandheden. Dette dokument beskriver designet og begrundelserne.
 
 ```mermaid
 erDiagram
-  countries ||--o{ guests : "oprindelsesland"
-  guests ||--o{ bookings : "har"
+  countries ||--o{ bookings : "gæstens land"
   room_types ||--o{ rooms : "har"
   room_types ||--o{ room_prices : "prissættes"
   seasons ||--o{ season_periods : "gælder i"
@@ -31,17 +30,6 @@ erDiagram
 | `name` | `VARCHAR(100)` | NOT NULL. Dansk navn |
 
 En naturlig nøgle bruges, fordi ISO-koder er stabile.
-
-### `guests`
-| Kolonne | Type | Constraints |
-|---|---|---|
-| `id` | `INT AUTO_INCREMENT` | PK |
-| `name` | `VARCHAR(150)` | NOT NULL, `CHECK (CHAR_LENGTH(TRIM(name)) > 0)` |
-| `country_code` | `CHAR(2)` | NOT NULL, FK → `countries.code` |
-
-- Index på `name` til søgning (FR-002).
-- Gæster dedupliceres ikke. Der er ingen entydig identitet (fx e-mail) i scope, så én gæst
-  oprettes pr. booking. Rediger booking opdaterer gæstens navn og land.
 
 ### `room_types`
 | Kolonne | Type | Constraints |
@@ -83,21 +71,28 @@ En naturlig nøgle bruges, fordi ISO-koder er stabile.
 | `season_id` | `INT` | PK (sammensat), FK → `seasons.id` |
 | `price_per_night` | `DECIMAL(10,2)` | NOT NULL, `CHECK (price_per_night >= 0)` |
 
+Ren relationstabel, så den har sammensat primærnøgle `(room_type_id, season_id)` i stedet for
+`id` (undtagelse i `docs/retningslinjer/database.md`).
+
 ### `bookings`
 | Kolonne | Type | Constraints |
 |---|---|---|
 | `id` | `INT AUTO_INCREMENT` | PK |
-| `guest_id` | `INT` | NOT NULL, FK → `guests.id` |
+| `guest_name` | `VARCHAR(150)` | NOT NULL, `CHECK (CHAR_LENGTH(TRIM(guest_name)) > 0)` |
+| `country_code` | `CHAR(2)` | NOT NULL, FK → `countries.code` |
 | `room_id` | `INT` | NOT NULL, FK → `rooms.id` |
 | `check_in` | `DATE` | NOT NULL |
 | `check_out` | `DATE` | NOT NULL, `CHECK (check_out > check_in)` |
-| `guests` | `TINYINT UNSIGNED` | NOT NULL, `CHECK (guests > 0)` |
+| `guest_count` | `TINYINT UNSIGNED` | NOT NULL, `CHECK (guest_count > 0)` |
 | `total_price` | `DECIMAL(10,2)` | NOT NULL, `CHECK (total_price >= 0)` |
 | `source` | `ENUM('backoffice','booking_system')` | NOT NULL, DEFAULT `'backoffice'` |
 | `created_at` | `DATETIME` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP` |
-| `updated_at` | `DATETIME` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` |
 
-- Indexes: `(room_id, check_in, check_out)` til overlap-tjek og `(check_in)` til listen.
+- Indexes: `(room_id, check_in, check_out)` til overlap-tjek, `(check_in)` til listen og
+  `(guest_name)` til søgning (FR-002).
+- **Gæsten ligger på bookingen.** Der er ingen gæsteidentitet (fx e-mail) i scope, så en
+  `guests`-tabel ville være 1:1 med bookingen. Modellen er stadig 3NF, og sletning af en
+  booking fjerner gæstens persondata.
 - **Ingen `room_type_id`.** Værelsestypen afledes af `rooms.room_type_id`. Hvis den også lå på
   bookingen, ville det være en transitiv afhængighed (3NF-brud), og de to kunne blive uenige.
 - **`total_price` er en bevidst undtagelse**: et fastfrosset historisk faktum (FR-009).
@@ -118,7 +113,6 @@ En naturlig nøgle bruges, fordi ISO-koder er stabile.
 | `name` | `VARCHAR(100)` | NOT NULL, UNIQUE |
 | `drink_category_id` | `INT` | NOT NULL, FK → `drink_categories.id` |
 | `price` | `DECIMAL(10,2)` | NOT NULL, `CHECK (price >= 0)` |
-| `is_active` | `BOOLEAN` | NOT NULL, DEFAULT TRUE. Inaktive drinks vises ikke ved salg, men historikken bevares |
 
 ### `bar_sales`
 | Kolonne | Type | Constraints |
@@ -131,6 +125,8 @@ En naturlig nøgle bruges, fordi ISO-koder er stabile.
 | `booking_id` | `INT` | NULL, FK → `bookings.id` **ON DELETE SET NULL** (FR-010a) |
 
 - Index på `(sold_at)`.
+- `created_at` og `sold_at` returneres som lokal tid (Europe/Copenhagen) uden offset,
+  `'YYYY-MM-DDTHH:mm:ss'`. Databasen og backend kører med `TZ=Europe/Copenhagen`.
 - **`unit_price` er en bevidst undtagelse**: prisen på salgstidspunktet (FR-010).
 
 ### `users`
@@ -140,31 +136,67 @@ En naturlig nøgle bruges, fordi ISO-koder er stabile.
 | `username` | `VARCHAR(50)` | NOT NULL, UNIQUE |
 | `password_hash` | `VARCHAR(255)` | NOT NULL. Format `scrypt$<salt-hex>$<hash-hex>` |
 
-## Afledte værdier (beregnes i services, gemmes aldrig)
+`users` er ikke i seed. Backend opretter kontoen ved start fra `SEED_USERNAME` og
+`SEED_PASSWORD` i `.env`, hvis tabellen er tom.
+
+## Ophold, status og visninger
+
+`today` er dags dato i Europe/Copenhagen (`backend/src/today.js`) og injiceres i services.
+
+- **Gæsten bor på hotellet på dato d** ⇔ `check_in <= d < check_out`. Det er den eneste
+  definition, og den ligger i `bookingService` (`isInHouseOn(booking, d)` og
+  `viewToDateBounds`).
+- **Status** (`bookingService.deriveStatus`):
+  - `upcoming`: `today < check_in`
+  - `arriving`: `today = check_in`
+  - `in_house`: `check_in < today < check_out`
+  - `departed`: `today >= check_out`
+- **Visninger** oversættes i servicen til neutrale datogrænser. Repositoriet får kun
+  parametrene `checkInAfter`, `checkInOnOrBefore`, `checkOutAfter` og `checkOutOnOrBefore`:
+  - `upcoming`: `check_in > today`
+  - `in_house`: `check_in <= today AND check_out > today` (inkluderer `arriving`)
+  - `departed`: `check_out <= today`
+  - `all`: ingen grænser
+- Visningerne er disjunkte, og `upcoming + in_house + departed = all`. Er `q` eller `date`
+  sat, bruger servicen `all`.
+- Barsalg på booking er tilladt, når `isInHouseOn(booking, salgsdato)`. Det inkluderer
+  ankomstdagen og udelukker afrejsedagen.
+
+## Afledte værdier (beregnes i backend, gemmes aldrig)
+
+Frontend regner ingenting. Den viser de værdier, API'et returnerer.
 
 | Værdi | Formel | Hvor |
 |---|---|---|
-| Nætter | `check_out − check_in` i dage | `bookingService` |
+| Nætter (`nights`) | `check_out − check_in` i dage | `bookingService` |
 | Værelsestype for booking | `rooms.room_type_id` (join) | `bookingRepository` |
-| Opholdsstatus | `upcoming`: `today < check_in`<br>`arriving`: `today = check_in`<br>`in_house`: `check_in < today < check_out`<br>`departed`: `today ≥ check_out` | `bookingService` |
-| Barsalgets beløb | `quantity × unit_price` | `barService` |
+| Opholdsstatus (`status`) | Se ovenfor | `bookingService.deriveStatus` |
+| Antal og samlet pris i listen (`total`, `totalPrice`) | `COUNT` og `COALESCE(SUM(total_price), 0)` over alle matchende rækker, ikke kun `limit` | `bookingRepository` (SQL), `bookingService` |
+| Antal pr. visning (`counts`) | Antal for `upcoming`, `in_house`, `departed` og `all` med de aktuelle `q`/`date`-filtre | `bookingService` |
+| Barsalgets beløb (`amount`) | `quantity × unit_price` | `barService` |
+| Dagens barsalg (`total`) | `COALESCE(SUM(quantity * unit_price), 0)` | `barRepository` (SQL), `barService` |
 | Opholdets pris | Σ pr. nat af `room_prices` for sæsonen, natten ligger i | `pricing.calculateStayPrice` |
+
+Alle summer i SQL bruger `COALESCE(SUM(…), 0)`, så en tom periode giver 0 og ikke `NULL`.
 
 ## Valideringsregler (fra spec)
 
 | Regel | Database | Service (dansk besked) | Fejlkode |
 |---|---|---|---|
-| Afrejse efter ankomst | `CHECK` | ja | `VALIDATION_ERROR` (felt `checkOut`) |
-| Gæster ≥ 1 | `CHECK` + OpenAPI `minimum` | – | `VALIDATION_ERROR` |
-| Gæster ≤ kapacitet (FR-006) | – | ja | `CAPACITY_EXCEEDED` (felt `guests`) |
-| Ledigt værelse af typen (FR-007) | – | ja, transaktion + `FOR UPDATE` | `ROOM_TYPE_FULLY_BOOKED` |
-| Pris findes for alle nætter | – | ja | `PRICE_NOT_CONFIGURED` |
-| Land findes | FK | ja | `VALIDATION_ERROR` (felt `countryCode`) |
-| Barsalg på booking kun hvis gæsten er i huset på salgsdatoen (FR-010a) | – | ja | `BOOKING_NOT_IN_HOUSE` (felt `bookingId`) |
-| Antal drinks ≥ 1 | `CHECK` + OpenAPI | – | `VALIDATION_ERROR` |
+| Gæstens navn udfyldt | `CHECK` + OpenAPI `pattern: '\S'` | ja, trimmer ("Gæstens navn skal udfyldes") | `VALIDATION_ERROR` 400 (felt `guestName`) |
+| Afrejse efter ankomst | `CHECK` | ja | `VALIDATION_ERROR` 400 (felt `checkOut`) |
+| Antal gæster ≥ 1 | `CHECK` + OpenAPI `minimum` | – | `VALIDATION_ERROR` 400 |
+| Antal gæster ≤ kapacitet (FR-006) | – | ja (i quote kun hvis `guestCount` er givet) | `CAPACITY_EXCEEDED` 422 (felt `guestCount`) |
+| Værelsestype findes | FK | ja | `VALIDATION_ERROR` 400 (felt `roomTypeId`) |
+| Ledigt værelse af typen (FR-007) | – | ja, transaktion + `FOR UPDATE` (quote giver `availableRooms: 0` og aldrig 409) | `ROOM_TYPE_FULLY_BOOKED` 409 |
+| Pris findes for alle nætter | – | ja | `PRICE_NOT_CONFIGURED` 422 |
+| Land findes (ikke i quote) | FK | ja | `VALIDATION_ERROR` 400 (felt `countryCode`) |
+| Barsalg på booking kun hvis gæsten bor på hotellet på salgsdatoen (FR-010a) | – | ja | `BOOKING_NOT_IN_HOUSE` 422 (felt `bookingId`) |
+| Antal drinks ≥ 1 | `CHECK` + OpenAPI | – | `VALIDATION_ERROR` 400 |
 
 ## Livscyklus
 
 Bookingen har ingen gemt tilstandsmaskine. Den oprettes, kan redigeres frit (pris og værelse
 beregnes igen) og slettes (hard delete). Barsalg, der er knyttet til en slettet booking,
-bevares med `booking_id = NULL`. Opholdsstatus følger kalenderen og afledes af datoerne.
+bevares med `booking_id = NULL`. Sletning fjerner også gæstens navn og land. Opholdsstatus
+følger kalenderen og afledes af datoerne.

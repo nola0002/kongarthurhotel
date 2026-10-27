@@ -40,7 +40,7 @@ Det er det lavest hængende sikkerhedsnet. Brug det før applikationskode:
 - **`NOT NULL`** på alt, der er påkrævet.
 - **`UNIQUE`** hvor der er unikhed, fx `(room_type_id, season_id)` i `room_prices` og
   `rooms.room_number`.
-- **`CHECK`** til simple regler: `guests > 0`, `check_out > check_in`, `quantity >= 1`,
+- **`CHECK`** til simple regler: `guest_count > 0`, `check_out > check_in`, `quantity >= 1`,
   `price >= 0`.
 
 Services validerer også, så brugeren får en pæn fejlbesked. Databasen er det sidste værn,
@@ -60,7 +60,8 @@ hvis en fejl slipper igennem.
 
 - `snake_case` og engelske navne.
 - Tabeller i flertal: `bookings`, `room_types`, `bar_sales`.
-- Primærnøgle hedder `id`. Fremmednøgler hedder `<ental>_id`: `room_type_id`, `guest_id`.
+- Primærnøgle hedder `id`. Fremmednøgler hedder `<ental>_id`: `room_type_id`, `booking_id`.
+- Rene relationstabeller (fx `room_prices`) har sammensat primærnøgle i stedet for `id`.
 - Booleans starter med `is_`/`has_`.
 
 ## 5. Skema og startdata

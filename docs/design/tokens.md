@@ -1,8 +1,9 @@
 # Design-tokens
 
-Kopieret fra Roster (`src/index.css`). Når frontenden er oprettet, er
-**`frontend/src/index.css` single source of truth**. Hvis en værdi ændres dér, opdateres denne
-fil, eller også slettes tabellen og der henvises til CSS-filen.
+Når frontenden er oprettet, er **`frontend/src/index.css` single source of truth**. Kodeblokken
+nedenfor er udgangspunktet. Efter implementeringen erstattes den af en henvisning til
+`frontend/src/index.css` (det gør en task i `specs/001-backoffice-bookinger/tasks.md`), så
+værdierne kun findes ét sted. Rolle-tabellerne bliver stående.
 
 Tokens ligger i Tailwind v4's `@theme`, så de virker direkte som klasser: `bg-paper`,
 `text-ink-2`, `rounded-2xl`, `shadow-panel`.
@@ -35,6 +36,8 @@ Tokens ligger i Tailwind v4's `@theme`, så de virker direkte som klasser: `bg-p
 
   /* Focus, selection, links. Used sparingly. */
   --color-signal: oklch(0.52 0.19 264);
+  --color-signal-hover: oklch(0.47 0.19 264);
+  --color-signal-active: oklch(0.43 0.18 264);
   --color-signal-soft: oklch(0.95 0.03 264);
 
   /* Status. Always paired with a label and a shape. */
@@ -114,9 +117,6 @@ Tokens ligger i Tailwind v4's `@theme`, så de virker direkte som klasser: `bg-p
 }
 ```
 
-Fjernet i forhold til Roster: `--text-6xl` og `hatch`-mønstret (Rosters "option"-status), som
-vi ikke har brug for.
-
 ## Roller: hvad bruges hvor
 
 ### Farver
@@ -134,6 +134,7 @@ vi ikke har brug for.
 | `ink-3` | Tertiær tekst: metadata, antal, ikoner, kolonneoverskrifter |
 | `ink-4` | Placeholder, "–" i tomme celler |
 | `signal` | **Kun** primærknap, fokus, links og aktivt nav-ikon |
+| `signal-hover` / `signal-active` | Primærknappens hover- og aktiv-tilstand |
 | `signal-soft` | Markering og fokus-halo på inputs |
 | `ok` / `-ink` / `-soft` | Positiv status (fx "i huset") |
 | `hold` / `-ink` / `-soft` | Advarsel (fx "ankommer i dag") |
@@ -143,7 +144,8 @@ Statusfarver kommer altid i tre trin: base til markør og ikon, `-ink` til tekst
 pill-baggrund.
 
 Til hover- og aktiv-tilstande bruges gennemsigtig ink i stedet for nye grå: `bg-ink/[0.04]`
-(hover i navigation), `bg-ink/[0.07]` (aktiv) og `bg-ink/20` (baggrund bag skuffe og dialog).
+(hover i navigation), `bg-ink/[0.07]` (aktiv) og `backdrop:bg-ink/20` (baggrund bag skuffe og dialog, via
+`::backdrop`).
 
 ### Typografi
 
@@ -159,7 +161,7 @@ Til hover- og aktiv-tilstande bruges gennemsigtig ink i stedet for nye grå: `bg
 
 | Højde | Bruges til |
 |---|---|
-| `h-8` | Lille knap, menupunkt |
+| `h-8` | Lille knap |
 | `h-10` | Normal knap, nav-punkt, visnings-faner |
 | `h-11` | Inputs, select |
 | `h-12` | Tabel-header |
@@ -170,8 +172,8 @@ Til hover- og aktiv-tilstande bruges gennemsigtig ink i stedet for nye grå: `bg
 | Radius | Bruges til |
 |---|---|
 | `rounded-md` (8) | Knapper, inputs |
-| `rounded-lg` (10) | Nav-punkter, menuer, toasts |
-| `rounded-xl` (14) | Select-popup |
+| `rounded-lg` (10) | Nav-punkter, toasts |
+| `rounded-xl` (14) | Bekræftelsesdialog |
 | `rounded-2xl` (18) | Fliser (`Tile`/`Panel`) |
 | `rounded-3xl` (24) | Indholdskort, skuffe |
 | `rounded-full` | Status-pills |
@@ -184,14 +186,16 @@ Alle skygger er tonet med `ink`, aldrig sorte.
 |---|---|
 | `shadow-panel` | Fliser. Bruges **i stedet for** border |
 | `shadow-canvas` | Indholdskortet |
-| `shadow-pop` | Menuer, dialoger, toasts, skuffe |
+| `shadow-pop` | Dialoger, toasts, skuffe |
 
 ### Bevægelse
 
 | Varighed | Bruges til |
 |---|---|
 | 100ms | Farveskift ved hover: `transition-colors duration-100` |
-| 150ms | Popups ind/ud: `transition-[opacity,scale]`, start og slut `scale-95 opacity-0` |
-| 420ms | Skuffen glider ind: `cubic-bezier(0.32,0.72,0,1)` |
+| 150ms | Bekræftelsesdialog ind: `transition-[opacity,scale] duration-150 starting:scale-95 starting:opacity-0` |
+| 200ms | Skuffen glider ind: `transition-[translate] duration-200 ease-out starting:translate-x-8` |
 
-Base UI styres via `data-starting-style:`/`data-ending-style:`-attributter.
+Bevægelse er almindelige CSS-transitions. `starting:` er Tailwinds variant for
+`@starting-style`, så animationen kører, når `<dialog>` åbnes med `showModal()`. Lukning sker
+uden animation.

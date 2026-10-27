@@ -9,7 +9,7 @@ info:
 
     Money is in DKK as JSON numbers (e.g. 1800 or 1800.5). Dates are ISO `YYYY-MM-DD`.
     All endpoints except login require a session cookie. `POST /bookings` also accepts
-    the external booking system's `X-API-Key` (T10).
+    the external booking system's `X-API-Key` (KB-T10).
 servers:
   - url: /api
 
@@ -77,10 +77,19 @@ paths:
           schema: { type: string, maxLength: 150 }
         - name: date
           in: query
-          description: Only bookings where the guest stays at the hotel on this date (check_in <= date < check_out)
+          description: Only bookings where the guest stays at the hotel on this date (checkIn <= date < checkOut)
           schema: { type: string, format: date }
         - name: view
           in: query
+          description: |
+            Date bounds relative to today (Europe/Copenhagen). The views are disjoint and
+            upcoming + in_house + departed = all.
+            - `upcoming`: checkIn > today
+            - `in_house`: checkIn <= today < checkOut (includes arriving)
+            - `departed`: checkOut <= today
+            - `all`: no bounds
+
+            If `q` or `date` is set, `view` is ignored and `all` is used.
           schema: { type: string, enum: [upcoming, in_house, departed, all], default: upcoming }
         - name: limit
           in: query
@@ -92,11 +101,22 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [total, items]
+                required: [total, totalPrice, counts, items]
                 properties:
-                  total: { type: integer, description: Total matches before limit }
+                  total: { type: integer, description: 'All matching bookings, not only the first `limit`' }
+                  totalPrice: { type: number, description: 'Sum of totalPrice in DKK over all matching bookings, not only the first `limit`' }
+                  counts:
+                    type: object
+                    description: 'Matches per view for the current `q`/`date` filters'
+                    required: [upcoming, in_house, departed, all]
+                    properties:
+                      upcoming: { type: integer }
+                      in_house: { type: integer }
+                      departed: { type: integer }
+                      all: { type: integer }
                   items:
                     type: array
+                    description: 'At most `limit` bookings'
                     items: { $ref: '#/components/schemas/Booking' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
@@ -125,11 +145,16 @@ paths:
     get:
       tags: [Bookings]
       summary: Price and availability preview before saving (FR-008)
+      description: |
+        Checks date order (400 VALIDATION_ERROR), that the room type exists, capacity
+        (only if `guestCount` is given; 422 CAPACITY_EXCEEDED) and price (422
+        PRICE_NOT_CONFIGURED). Does not check the country and never returns 409:
+        a sold-out room type gives `availableRooms: 0`.
       parameters:
         - { name: roomTypeId, in: query, required: true, schema: { type: integer, minimum: 1 } }
         - { name: checkIn, in: query, required: true, schema: { type: string, format: date } }
         - { name: checkOut, in: query, required: true, schema: { type: string, format: date } }
-        - { name: guests, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: guestCount, in: query, schema: { type: integer, minimum: 1 } }
         - name: excludeBookingId
           in: query
           description: When editing, ignore this booking in the availability check
@@ -221,7 +246,7 @@ paths:
   /drinks:
     get:
       tags: [Bar]
-      summary: Active drinks with category and current price (FR-011)
+      summary: Drinks with category and current price (FR-011)
       responses:
         '200':
           description: Drinks
@@ -248,7 +273,7 @@ paths:
                 type: object
                 required: [total, items]
                 properties:
-                  total: { type: number, description: Sum of amounts in DKK }
+                  total: { type: number, description: 'Sum of amounts in DKK, computed by the backend (0 when there are no sales)' }
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/BarSale' }
@@ -289,32 +314,28 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: Key for the hotel's external booking system (T10); only valid for POST /bookings
+      description: "Key for the hotel's external booking system (KB-T10); only valid for POST /bookings"
 
   schemas:
     BookingInput:
       type: object
       additionalProperties: false
-      required: [guestName, countryCode, roomTypeId, checkIn, checkOut, guests]
+      required: [guestName, countryCode, roomTypeId, checkIn, checkOut, guestCount]
       properties:
-        guestName: { type: string, minLength: 1, maxLength: 150 }
+        guestName: { type: string, minLength: 1, maxLength: 150, pattern: '\S', description: Must contain a non-whitespace character }
         countryCode: { type: string, pattern: '^[A-Z]{2}$' }
         roomTypeId: { type: integer, minimum: 1 }
         checkIn: { type: string, format: date }
         checkOut: { type: string, format: date }
-        guests: { type: integer, minimum: 1, maximum: 20 }
+        guestCount: { type: integer, minimum: 1, maximum: 20 }
 
     Booking:
       type: object
-      required: [id, guest, roomType, room, checkIn, checkOut, nights, guests, totalPrice, source, status, createdAt]
+      required: [id, guestName, country, roomType, room, checkIn, checkOut, nights, guestCount, totalPrice, source, status, createdAt]
       properties:
         id: { type: integer }
-        guest:
-          type: object
-          required: [name, country]
-          properties:
-            name: { type: string }
-            country: { $ref: '#/components/schemas/Country' }
+        guestName: { type: string }
+        country: { $ref: '#/components/schemas/Country' }
         roomType:
           type: object
           required: [id, name]
@@ -329,15 +350,20 @@ components:
             number: { type: string }
         checkIn: { type: string, format: date }
         checkOut: { type: string, format: date }
-        nights: { type: integer, description: Derived, not stored }
-        guests: { type: integer }
+        nights: { type: integer, description: 'Derived by the backend, not stored' }
+        guestCount: { type: integer }
         totalPrice: { type: number, description: Price frozen at booking/edit time (FR-009) }
         source: { type: string, enum: [backoffice, booking_system] }
         status:
           type: string
           enum: [upcoming, arriving, in_house, departed]
-          description: Derived from dates and today, not stored
-        createdAt: { type: string, format: date-time }
+          description: |
+            Derived by the backend from the dates and today (Europe/Copenhagen), not stored.
+            - `upcoming`: today < checkIn
+            - `arriving`: today = checkIn
+            - `in_house`: checkIn < today < checkOut
+            - `departed`: today >= checkOut
+        createdAt: { type: string, description: 'Lokal tid (Europe/Copenhagen), ISO uden offset (YYYY-MM-DDTHH:mm:ss)' }
 
     Quote:
       type: object
@@ -356,7 +382,7 @@ components:
               pricePerNight: { type: number }
               subtotal: { type: number }
         total: { type: number }
-        availableRooms: { type: integer, description: Free rooms of the type in the period }
+        availableRooms: { type: integer, description: 'Free rooms of the type in the period; 0 when sold out' }
 
     RoomType:
       type: object
@@ -383,7 +409,7 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
-        category: { type: string, description: e.g. Cocktail, Kaffe }
+        category: { type: string, description: 'e.g. Cocktail, Kaffe' }
         price: { type: number }
 
     BarSale:
@@ -400,8 +426,8 @@ components:
             category: { type: string }
         quantity: { type: integer }
         unitPrice: { type: number, description: Price at time of sale (FR-010) }
-        amount: { type: number, description: quantity × unitPrice }
-        soldAt: { type: string, format: date-time }
+        amount: { type: number, description: 'quantity × unitPrice, computed by the backend' }
+        soldAt: { type: string, description: 'Lokal tid (Europe/Copenhagen), ISO uden offset (YYYY-MM-DDTHH:mm:ss)' }
         bookingId: { type: integer, nullable: true }
         roomNumber: { type: string, nullable: true }
 
@@ -424,12 +450,12 @@ components:
                 - PRICE_NOT_CONFIGURED
                 - BOOKING_NOT_IN_HOUSE
                 - INTERNAL_ERROR
-            message: { type: string, description: Danish, shown to the user as-is }
-            field: { type: string, description: Input field the error refers to, if any }
+            message: { type: string, description: 'Danish, shown to the user as-is' }
+            field: { type: string, description: 'Input field the error refers to, if any' }
 
   responses:
     ValidationError:
-      description: Request does not match the contract (VALIDATION_ERROR)
+      description: Request does not match the contract or the dates are in the wrong order (VALIDATION_ERROR)
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -449,7 +475,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     BusinessRule:
-      description: A business rule was broken (CAPACITY_EXCEEDED, PRICE_NOT_CONFIGURED, BOOKING_NOT_IN_HOUSE, VALIDATION_ERROR for date order)
+      description: 'A business rule was broken (CAPACITY_EXCEEDED, PRICE_NOT_CONFIGURED, BOOKING_NOT_IN_HOUSE)'
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

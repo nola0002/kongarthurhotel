@@ -9,7 +9,7 @@
 **Input**: User description: "Back office til receptionisten på Hotel Kong Arthur: se, søge,
 oprette, redigere og slette bookinger med validering af kapacitet og dobbeltbooking,
 automatisk prisberegning ud fra værelsestype, sæson og antal nætter, registrering af barsalg
-samt modtagelse af bookinger fra hotellets eget bookingsystem. (Kravboard: FR1–FR9, T7, T10)"
+samt modtagelse af bookinger fra hotellets eget bookingsystem. (Kravboard: FR1–FR9, KB-T7, KB-T10)"
 
 ## Clarifications
 
@@ -190,7 +190,7 @@ Som hoteladministrator ønsker jeg, at bookinger fra hotellets eget bookingsyste
 kommer ind i systemet, så back office og dashboard altid viser aktuelle data uden manuel
 indtastning.
 
-**Why this priority**: Krav T10 og forudsætning for "live"-data i BI (FT4), men back office
+**Why this priority**: Krav KB-T10 og forudsætning for "live"-data i BI (FT4), men back office
 kan bruges uden.
 
 **Independent Test**: Et simuleret eksternt bookingsystem sender en ny booking. Den vises i
@@ -256,10 +256,10 @@ bookinglisten og overholder samme regler som manuelle bookinger.
   salgsdatoen. Når en booking slettes, MUST tilknyttede barsalg bevares som selvstændige salg.
 - **FR-011** (FR9): Hver drink MUST tilhøre en kategori (mindst "cocktail" og "kaffe"), så
   fordelingen kan opgøres i BI-dashboardet.
-- **FR-012** (T7): Værelsestyper (inkl. kapacitet), værelser, sæsoner (med datoperioder),
+- **FR-012** (KB-T7): Værelsestyper (inkl. kapacitet), værelser, sæsoner (med datoperioder),
   priser pr. værelsestype pr. sæson samt drinks og drinkpriser MUST ligge som data og ikke
   være hardcodet.
-- **FR-013** (T10): Systemet MUST kunne modtage bookinger fra hotellets eget bookingsystem via
+- **FR-013** (KB-T10): Systemet MUST kunne modtage bookinger fra hotellets eget bookingsystem via
   en sikret integration. Disse bookinger MUST valideres efter samme regler som manuelle
   bookinger og markeres med kilde.
 - **FR-014**: Valideringsfejl MUST vises for receptionisten som en forståelig dansk besked, der
@@ -272,8 +272,8 @@ bookinglisten og overholder samme regler som manuelle bookinger.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Gæst**: Navn og oprindelsesland. Land bruges i BI (FT6, FT8). En gæst kan have flere
-  bookinger.
+- **Gæst**: Navn og oprindelsesland, registreret på den enkelte booking. Land bruges i BI
+  (FT6, FT8). Der er ingen fælles gæsteprofil på tværs af bookinger i denne version.
 - **Værelsestype**: Navn og maksimal kapacitet (antal gæster).
 - **Værelse**: Værelsesnummer. Tilhører én værelsestype.
 - **Sæson**: Navn og datoperiode. Sæsoner dækker hele året uden overlap.
@@ -296,8 +296,8 @@ bookinglisten og overholder samme regler som manuelle bookinger.
 - **SC-004**: Den beregnede pris matcher en manuel beregning i 100 % af testscenarierne, også
   for ophold over to sæsoner.
 - **SC-005**: Ingen booking kan slettes uden et eksplicit bekræftelsestrin.
-- **SC-006**: En booking sendt fra det eksterne bookingsystem er synlig i bookinglisten inden
-  for 5 sekunder.
+- **SC-006**: En booking sendt fra det eksterne bookingsystem er synlig i bookinglisten, næste
+  gang listen indlæses (ingen manuel indtastning).
 - **SC-007**: Et barsalg kan registreres på under 30 sekunder.
 
 ## Assumptions
@@ -318,4 +318,4 @@ bookinglisten og overholder samme regler som manuelle bookinger.
   denne version, ikke via en brugergrænseflade.
 - Kundetilfredshed registreres ikke (FT12 er "Could", og der findes ingen data).
 - Brugergrænsefladen er på dansk og bruges på desktop i receptionen. Mobil er uden for scope.
-- Der er ingen AI-funktionalitet i brugergrænsefladen (T8).
+- Der er ingen AI-funktionalitet i brugergrænsefladen (KB-T8).
