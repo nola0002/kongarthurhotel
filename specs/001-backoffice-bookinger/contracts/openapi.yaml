@@ -1,0 +1,455 @@
+openapi: 3.0.3
+info:
+  title: Kong Arthur – Back Office API
+  version: 1.0.0
+  description: |
+    REST/JSON API for the Kong Arthur back office (feature 001).
+    This file is the single source of truth for the API: it is served by Swagger UI
+    and every request is validated against it (express-openapi-validator).
+
+    Money is in DKK as JSON numbers (e.g. 1800 or 1800.5). Dates are ISO `YYYY-MM-DD`.
+    All endpoints except login require a session cookie. `POST /bookings` also accepts
+    the external booking system's `X-API-Key` (T10).
+servers:
+  - url: /api
+
+tags:
+  - name: Auth
+  - name: Bookings
+  - name: Reference data
+  - name: Bar
+
+security:
+  - session: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with the shared receptionist account (FR-015)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, password]
+              properties:
+                username: { type: string, minLength: 1, maxLength: 50 }
+                password: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        '204': { description: Logged in; session cookie set }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out (clears the session cookie)
+      responses:
+        '204': { description: Logged out }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user (used by the frontend login guard)
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [username]
+                properties:
+                  username: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /bookings:
+    get:
+      tags: [Bookings]
+      summary: List and search bookings (FR-001, FR-002)
+      parameters:
+        - name: q
+          in: query
+          description: Case-insensitive partial match on guest name
+          schema: { type: string, maxLength: 150 }
+        - name: date
+          in: query
+          description: Only bookings where the guest stays at the hotel on this date (check_in <= date < check_out)
+          schema: { type: string, format: date }
+        - name: view
+          in: query
+          schema: { type: string, enum: [upcoming, in_house, departed, all], default: upcoming }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Matching bookings ordered by check-in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items]
+                properties:
+                  total: { type: integer, description: Total matches before limit }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Bookings]
+      summary: Create a booking; a free room of the type is assigned (FR-003, FR-006–FR-008, FR-013)
+      security:
+        - session: []
+        - bookingSystemKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
+  /bookings/quote:
+    get:
+      tags: [Bookings]
+      summary: Price and availability preview before saving (FR-008)
+      parameters:
+        - { name: roomTypeId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: checkIn, in: query, required: true, schema: { type: string, format: date } }
+        - { name: checkOut, in: query, required: true, schema: { type: string, format: date } }
+        - { name: guests, in: query, schema: { type: integer, minimum: 1 } }
+        - name: excludeBookingId
+          in: query
+          description: When editing, ignore this booking in the availability check
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Quote
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
+  /bookings/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [Bookings]
+      summary: One booking
+      responses:
+        '200':
+          description: Booking
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Bookings]
+      summary: Edit a booking; price and room are recalculated (FR-004, FR-016)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+    delete:
+      tags: [Bookings]
+      summary: Delete a booking; linked bar sales are kept (FR-005, FR-010a)
+      description: Confirmation is a UI concern (FR-005); the API deletes immediately.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /room-types:
+    get:
+      tags: [Reference data]
+      summary: Room types with capacity and, if a period is given, availability
+      parameters:
+        - { name: checkIn, in: query, schema: { type: string, format: date } }
+        - { name: checkOut, in: query, schema: { type: string, format: date } }
+        - { name: excludeBookingId, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Room types
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RoomType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /countries:
+    get:
+      tags: [Reference data]
+      summary: Countries (ISO 3166-1 alpha-2, Danish names)
+      responses:
+        '200':
+          description: Countries sorted by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Country' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /drinks:
+    get:
+      tags: [Bar]
+      summary: Active drinks with category and current price (FR-011)
+      responses:
+        '200':
+          description: Drinks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Drink' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /bar-sales:
+    get:
+      tags: [Bar]
+      summary: Bar sales for a day and/or a booking
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: bookingId, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Sales, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items]
+                properties:
+                  total: { type: number, description: Sum of amounts in DKK }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/BarSale' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Bar]
+      summary: Register a bar sale, optionally on a guest's booking (FR-010, FR-010a)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [drinkId, quantity]
+              properties:
+                drinkId: { type: integer, minimum: 1 }
+                quantity: { type: integer, minimum: 1, maximum: 100 }
+                bookingId: { type: integer, minimum: 1, nullable: true }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BarSale' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Signed session cookie set by POST /auth/login
+    bookingSystemKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Key for the hotel's external booking system (T10); only valid for POST /bookings
+
+  schemas:
+    BookingInput:
+      type: object
+      additionalProperties: false
+      required: [guestName, countryCode, roomTypeId, checkIn, checkOut, guests]
+      properties:
+        guestName: { type: string, minLength: 1, maxLength: 150 }
+        countryCode: { type: string, pattern: '^[A-Z]{2}$' }
+        roomTypeId: { type: integer, minimum: 1 }
+        checkIn: { type: string, format: date }
+        checkOut: { type: string, format: date }
+        guests: { type: integer, minimum: 1, maximum: 20 }
+
+    Booking:
+      type: object
+      required: [id, guest, roomType, room, checkIn, checkOut, nights, guests, totalPrice, source, status, createdAt]
+      properties:
+        id: { type: integer }
+        guest:
+          type: object
+          required: [name, country]
+          properties:
+            name: { type: string }
+            country: { $ref: '#/components/schemas/Country' }
+        roomType:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        room:
+          type: object
+          required: [id, number]
+          properties:
+            id: { type: integer }
+            number: { type: string }
+        checkIn: { type: string, format: date }
+        checkOut: { type: string, format: date }
+        nights: { type: integer, description: Derived, not stored }
+        guests: { type: integer }
+        totalPrice: { type: number, description: Price frozen at booking/edit time (FR-009) }
+        source: { type: string, enum: [backoffice, booking_system] }
+        status:
+          type: string
+          enum: [upcoming, arriving, in_house, departed]
+          description: Derived from dates and today, not stored
+        createdAt: { type: string, format: date-time }
+
+    Quote:
+      type: object
+      required: [nights, lines, total, availableRooms]
+      properties:
+        nights: { type: integer }
+        lines:
+          type: array
+          description: One line per season the stay touches
+          items:
+            type: object
+            required: [season, nights, pricePerNight, subtotal]
+            properties:
+              season: { type: string }
+              nights: { type: integer }
+              pricePerNight: { type: number }
+              subtotal: { type: number }
+        total: { type: number }
+        availableRooms: { type: integer, description: Free rooms of the type in the period }
+
+    RoomType:
+      type: object
+      required: [id, name, capacity, fromPrice]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        capacity: { type: integer }
+        fromPrice: { type: number, description: Lowest price per night across seasons }
+        availableRooms:
+          type: integer
+          description: Only present when checkIn and checkOut are given
+
+    Country:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+
+    Drink:
+      type: object
+      required: [id, name, category, price]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        category: { type: string, description: e.g. Cocktail, Kaffe }
+        price: { type: number }
+
+    BarSale:
+      type: object
+      required: [id, drink, quantity, unitPrice, amount, soldAt, bookingId]
+      properties:
+        id: { type: integer }
+        drink:
+          type: object
+          required: [id, name, category]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            category: { type: string }
+        quantity: { type: integer }
+        unitPrice: { type: number, description: Price at time of sale (FR-010) }
+        amount: { type: number, description: quantity × unitPrice }
+        soldAt: { type: string, format: date-time }
+        bookingId: { type: integer, nullable: true }
+        roomNumber: { type: string, nullable: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHORIZED
+                - NOT_FOUND
+                - CAPACITY_EXCEEDED
+                - ROOM_TYPE_FULLY_BOOKED
+                - PRICE_NOT_CONFIGURED
+                - BOOKING_NOT_IN_HOUSE
+                - INTERNAL_ERROR
+            message: { type: string, description: Danish, shown to the user as-is }
+            field: { type: string, description: Input field the error refers to, if any }
+
+  responses:
+    ValidationError:
+      description: Request does not match the contract (VALIDATION_ERROR)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Not logged in or invalid credentials/API key (UNAUTHORIZED)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource does not exist (NOT_FOUND)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: No free room of the type in the period (ROOM_TYPE_FULLY_BOOKED)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BusinessRule:
+      description: A business rule was broken (CAPACITY_EXCEEDED, PRICE_NOT_CONFIGURED, BOOKING_NOT_IN_HOUSE, VALIDATION_ERROR for date order)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

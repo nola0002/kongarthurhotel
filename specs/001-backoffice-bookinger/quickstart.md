@@ -1,0 +1,94 @@
+# Quickstart: validering af Back Office (001)
+
+Formålet er at bevise, at featuren virker fra ende til anden. Kontrakten står i
+[`contracts/openapi.yaml`](contracts/openapi.yaml), og datamodellen i
+[`data-model.md`](data-model.md).
+
+## Forudsætninger
+
+- Docker Desktop med Docker Compose v2.
+- Port 3000 (API), 5173 (frontend), 8080 (Swagger UI) og 3306 (MySQL) er ledige.
+- `cp .env.example .env`. Standardværdierne virker lokalt.
+
+## Start
+
+```bash
+docker compose up --build
+```
+
+Systemet er klar, når backend logger `API listening on :3000`. Backend venter selv på
+MySQL's healthcheck (T4).
+
+| Hvad | URL |
+|---|---|
+| Back office | http://localhost:5173 |
+| API | http://localhost:3000/api |
+| Swagger UI | http://localhost:8080 |
+
+Login: brugernavn og adgangskode fra `.env` (`SEED_USERNAME` / `SEED_PASSWORD`, standard
+`reception` / `kongarthur`).
+
+**Nulstil data** (efter ændring af `db/*.sql`, fordi init-scripts kun kører på et tomt
+volume):
+
+```bash
+docker compose down -v && docker compose up --build
+```
+
+## Valideringsscenarier
+
+Hvert scenarie svarer til acceptkriterier i [`spec.md`](spec.md).
+
+| # | Scenarie | Forventet resultat | Krav |
+|---|---|---|---|
+| 1 | Åbn http://localhost:5173 uden at være logget ind | Login-siden vises, og ingen data er synlige | US0, FR-015 |
+| 2 | Log ind med forkert adgangskode | En generel fejlbesked vises | US0 |
+| 3 | Log ind korrekt | Bookinglisten vises med "Viser 100 af N" | FR-001 |
+| 4 | Søg på en del af et gæstenavn med små bogstaver | Kun matchende bookinger vises | FR-002 |
+| 5 | Filtrér på en dato | Kun gæster, der bor på hotellet den dato, vises | FR-002 |
+| 6 | "Ny booking": vælg type og datoer over et sæsonskifte | Prisen vises pr. sæson før gem og matcher manuel beregning | FR-008, SC-004 |
+| 7 | Gem bookingen | Toasten nævner det tildelte værelse, og bookingen står i listen | FR-003, FR-016 |
+| 8 | Opret booking med flere gæster end typens kapacitet | Fejlen vises under "Antal gæster" | FR-006 |
+| 9 | Book en type, til alle værelser er optaget i perioden (eller brug scenarie 14) | Banner: "Ingen ledige værelser af typen …" | FR-007 |
+| 10 | Rediger en booking til nye datoer | Prisen genberegnes, og værelset beholdes, hvis det er ledigt | FR-004 |
+| 11 | Slet: annullér i dialogen, slet derefter med bekræftelse | Bookingen findes efter annullering og er væk efter bekræftelse | FR-005 |
+| 12 | Barsalg: 2 × en cocktail lagt på en gæst i huset | Salget vises i dagens salg og på bookingen | FR-010, FR-010a |
+| 13 | Slet bookingen fra scenarie 12 | Barsalget findes stadig, nu uden værelse | FR-010a |
+| 14 | Eksternt bookingsystem (se nedenfor) | 201, og bookingen vises med kilden "Bookingsystem" | FR-013, T10 |
+| 15 | `docker compose restart` | Alle data findes stadig | T5 |
+| 16 | Åbn Swagger UI og kør `GET /countries` via "Try it out" efter login i samme browser | Listen returneres | A3, D7 |
+
+### Scenarie 14: eksternt bookingsystem
+
+```bash
+curl -i -X POST http://localhost:3000/api/bookings \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $(grep BOOKING_SYSTEM_API_KEY .env | cut -d= -f2)" \
+  -d '{"guestName":"Test Ekstern","countryCode":"DE","roomTypeId":2,
+       "checkIn":"2027-01-10","checkOut":"2027-01-12","guests":2}'
+```
+
+Forventet: `201 Created` med `"source": "booking_system"`.
+
+Fejlvarianter:
+- Uden header eller med forkert nøgle: `401`.
+- Med en overlappende, udsolgt periode: `409` med `ROOM_TYPE_FULLY_BOOKED`.
+
+I drift sendes kaldet over HTTPS gennem en reverse proxy (se `research.md` R7).
+
+## Automatiske tests
+
+```bash
+docker compose exec backend npm test
+```
+
+Forventet: alle tests grønne. Tests af forretningsregler og priser (FR-006–FR-008, FR-010a)
+kører uden database. API-testene bruger databasen `kongarthur_test` og rører ikke
+udviklingsdata.
+
+## Genskab testdata
+
+```bash
+docker compose exec backend node scripts/generate-seed.js   # skriver db/02_seed.sql
+docker compose down -v && docker compose up --build
+```

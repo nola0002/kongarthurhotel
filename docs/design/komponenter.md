@@ -132,7 +132,7 @@ const setParam = (key, value) =>
 Kilde: `NewBooking.tsx` (Base UI `Drawer` fra højre, `max-w-[560px] rounded-3xl`).
 
 - **Samme komponent til opret og rediger.** Får den en `booking`-prop, udfyldes felterne
-  (`defaultValue`), og der sendes `PATCH` i stedet for `POST`.
+  (`defaultValue`), og der sendes `PUT /api/bookings/:id` i stedet for `POST /api/bookings`.
 - Opbygning: `<form>` med sticky header (titel + luk-X), scrollbar body med `Section`-blokke
   (`space-y-9`) og sticky footer (Annullér + primær Gem).
 - Ukontrollerede native inputs, der læses med `new FormData(e.currentTarget)`.

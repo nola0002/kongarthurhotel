@@ -118,8 +118,9 @@ Kilde: `pages/BookingDetail.tsx` (uden faner, da én side er nok).
   røde punkt "Slet booking" (åbner `AlertDialog`, se `komponenter.md`).
 - Fliser (`lg:grid-cols-12 gap-5`):
   - **Ophold** (`Field`-liste): ankomst, afrejse, nætter, gæster, værelse, kilde og oprettet.
-  - **Pris**: prisopdeling pr. sæson og total, ligesom i skuffen. Prisen, der blev *gemt*
-    ved oprettelse, vises (FR-009).
+  - **Pris**: den *gemte* totalpris (`Stat`) og antal nætter (FR-009). Der vises ingen
+    opdeling pr. sæson her, fordi den ville blive beregnet ud fra dagens priser og kunne
+    afvige fra den gemte total.
   - **Barsalg på værelset**: tabel med tidspunkt, drink, antal og beløb, sum i bunden og
     knappen "Registrér salg", der er forudfyldt med denne booking. Den vises kun, mens gæsten
     er i huset.
