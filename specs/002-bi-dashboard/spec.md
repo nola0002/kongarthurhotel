@@ -20,6 +20,14 @@ A4, A5)"
 - Q: Hvor "live" skal data i dashboardet være? → A: Data hentes fra API'et, hver gang
   dashboardet åbnes eller opdateres manuelt. Der er ingen planlagt automatisk opdatering.
 
+### Session 2026-10-30
+
+- Q: Hvordan forbinder Tableau til API'et, og hvordan sikres læseadgangen? → A: Tableau
+  Desktop (2023.3+) bruger REST API Connector fra Tableau Exchange og henter JSON med HTTP GET
+  til et extract, der opdateres manuelt. Web Data Connector 3.0 er udfaset og bruges ikke.
+  Ledelsen autentificeres med en separat læse-nøgle (`BI_API_KEY`) som Bearer-token. Nøglen
+  gælder kun endpoints under `/api/analytics`, og de er alle GET (FR-013, FR-014).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Indtjening overblik (Priority: P1)
