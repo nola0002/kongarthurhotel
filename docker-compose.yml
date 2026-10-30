@@ -1,0 +1,49 @@
+services:
+  db:
+    image: mysql:8.4
+    env_file: .env
+    environment:
+      TZ: Europe/Copenhagen
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP, so the container only reports healthy after the init scripts have run (KB-T4)
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 --protocol=TCP -u$$MYSQL_USER -p$$MYSQL_PASSWORD']
+      interval: 3s
+      retries: 40
+      start_period: 60s
+
+  backend:
+    build: ./backend
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      TZ: Europe/Copenhagen
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./db:/db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  swagger:
+    image: swaggerapi/swagger-ui
+    environment:
+      SWAGGER_JSON: /spec/openapi.yaml
+      BASE_URL: /docs
+    volumes:
+      - ./backend/openapi.yaml:/spec/openapi.yaml:ro
+
+volumes:
+  db-data:

@@ -1,0 +1,16 @@
+{
+  "name": "kongarthur-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cookie-session": "^2.1.1",
+    "express": "^5.3.0",
+    "express-openapi-validator": "^5.6.2",
+    "mysql2": "^3.24.6"
+  }
+}
