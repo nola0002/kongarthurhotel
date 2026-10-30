@@ -6,7 +6,7 @@ description: "Tasks for 002-bi-dashboard"
 
 **Input**: Design documents from `/specs/002-bi-dashboard/`
 
-**Prerequisites**: plan.md, spec.md, research.md (R1–R7), data-model.md, contracts/README.md
+**Prerequisites**: plan.md, spec.md, research.md (R1–R11), data-model.md, contracts/README.md
 (kontrakten er `backend/openapi.yaml`), quickstart.md
 
 **Tests**: Inkluderet. `docs/retningslinjer/tests.md` kræver en test for hvert nøgletal i
@@ -25,7 +25,7 @@ Tableau-workbooken, den manuelle gennemgang og converge er åbne (`[ ]`).
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Kan køres parallelt (andre filer, ingen afhængighed af ufærdige tasks).
-- **[Story]**: US1–US6 svarer til User Story 1–6 i spec.md.
+- **[Story]**: US1–US7 svarer til User Story 1–7 i spec.md.
 
 ## Path Conventions
 
@@ -340,3 +340,94 @@ Task: "T023 Baromsætning pr. drink i tableau/kong-arthur.twbx"
   udsnit (plan.md Complexity Tracking).
 - Undgå: formler i Tableau, SQL uden for repositories, hardcodede kategorier eller sæsoner,
   gemte afledte data og nye afhængigheder uden begrundelse.
+
+---
+
+## Phase 10: Stjerneskema (2026-10-30)
+
+**Purpose**: Én workbook med én datakilde bygget som stjerneskema, så hvert filter kun rammer
+de visninger, hvis data har dimensionen (spec.md § Clarifications "Ændring 2026-10-30", US7,
+FR-012, FR-013, FR-017, FR-018, SC-006, SC-007). Grundlaget er research R8–R11,
+[data-model.md § Stjerneskema](data-model.md#stjerneskema-ændring-2026-10-30) og
+[contracts/README.md § Ændring 2026-10-30](contracts/README.md#ændring-2026-10-30-stjerneskema).
+
+**Erstatter**: De åbne Tableau-tasks T003, T009, T012–T014, T017, T020, T023, T024, T027,
+T030–T032, T035 og T036 bygger på fem datakilder og Tableau 2023.3. De udføres **ikke**. Hver
+ny task nedenfor nævner, hvad den erstatter, og de gamle tasks står uændret som historik. Kan
+gruppen ikke få Tableau Desktop 2024.2.1+, gælder de gamle tasks i stedet (plan.md § Ændring
+2026-10-30) *(foreslået af AI, afventer gruppen)*.
+
+**Independent Test**: quickstart.md Del 1 scenarie 10–16 (API) og Del 2 T1–T10 og F1–F6
+(workbook).
+
+### Backend og kontrakt (T039–T042 i samme commit, constitution II)
+
+- [X] T037 [P] [US7] Skriv tests i `backend/test/analyticsService.test.js` med falsk repository, før T039 og T040, og se dem fejle:
+  - `FT16`: Kalenderen har én række pr. dato i hele kalenderår fra det tidligste til det seneste år blandt sæsonperioder, `checkIn`, `checkOut` og barsalgsdatoer, uden huller. Fx en periode i 2025 og et barsalg 2026-03-01 giver 730 rækker fra 2025-01-01 til 2026-12-31.
+  - `FT16`: `season` er navnet på sæsonen for perioden, der dækker datoen, og `null` for en dato uden periode.
+  - `FT16`: `roomTypes()` giver alle værelsestyper sorteret efter id, også en type uden værelser (`rooms` 0). `countries()` giver alle lande, også dem uden bookinger.
+  - `FT10`: `kpis()` har rækker for hvert år i kalenderen, også et år uden data, hvor værdierne er 0 og aldrig `NaN` eller `null` (FR-018).
+  - `FT16`: Rækkerne fra `roomNights()`, `occupancy()`, `bookings()` og `barSales()` har ikke felterne `year`, `month`, `season` eller `country`.
+  - Eksisterende tests, der læser de fjernede felter fra faktarækkerne, bruger i stedet `date`/`checkIn`. Formlerne og de forventede tal er uændrede.
+- [X] T038 [P] [US7] I `backend/src/repositories/analyticsRepository.js`: `listRoomTypes` returnerer også `room_types.capacity`, og `listCountries` re-eksporteres fra `backend/src/repositories/referenceRepository.js`. Ingen ny SQL til kalenderen (plan.md § Ændring 2026-10-30).
+- [X] T039 [US7] I `backend/src/services/analyticsService.js` (afhænger af T038):
+  - Én hjælper for kalenderårene (research R10), som både `calendar()` og `kpis()` bruger, så de altid har de samme år (FR-017, FR-018).
+  - `calendar()`: `{ date, year, month, season }` sorteret efter `date`. Sæsonen findes med de eksisterende hjælpere fra `backend/src/services/pricing.js`.
+  - `roomTypes()`: `{ roomType, capacity, rooms }` sorteret efter `room_types.id`.
+  - `countries()`: `{ countryCode, country }` sorteret efter `country`.
+- [X] T040 [US7] I `backend/src/services/analyticsService.js`: fjern `year`, `month`, `season` og `country` fra rækkerne i `roomNights()`, `occupancy()`, `bookings()` og `barSales()` (contracts/README.md, tabellen "Ændrede faktafelter", research R11). Nøgletallene må stadig gruppere pr. år internt. Formlerne er uændrede (FR-011). `drink` og `category` bliver på barsalget.
+- [X] T041 [US7] I `backend/src/routes/analytics.js`: tilføj `calendar`, `room-types` og `countries` til `TABLES`, så de får en `GET`-handler med `allowBiKey`, og `GET /analytics` lister otte tabeller (afhænger af T039).
+- [X] T042 [US7] I `backend/openapi.yaml`, **samme commit som T039–T041**:
+  - Tre `GET`-stier `/analytics/calendar`, `/analytics/room-types` og `/analytics/countries` med samme `security` (session **eller** Bearer), `200` med en array og `401` med `Error`.
+  - Et skema pr. ny sti med felterne fra contracts/README.md (alle `required`, `date` som `format: date`, `month` 1–12, `season` `nullable: true`).
+  - Fjern de felter, der står i contracts/README.md, fra `RoomNight`, `OccupancyDay`, `AnalyticsBooking` og `AnalyticsBarSale`.
+  - Ny beskrivelse af årene i `/analytics/kpis` ("hvert år i `/analytics/calendar`") og af de otte tabeller i `GET /analytics`.
+- [X] T043 [US7] Udvid `backend/test/api.test.js`, og kør derefter `npx prettier@3 --write backend` og `docker compose exec backend npm test`, til alt er grønt (afhænger af T037–T042):
+  - `FT17`: `/api/analytics/calendar`, `/room-types` og `/countries` giver 401 uden auth og 200 med en array med Bearer-nøglen.
+  - `FT16`: `GET /api/analytics` lister otte tabeller, inkl. `calendar`, `room-types` og `countries`.
+
+### Dokumentation (parallelt med backend)
+
+- [X] T044 [P] Skriv `docs/tableau-guide.md`. Den er det eneste sted, byggetrinene står (quickstart.md og README linker hertil). Den skal dække:
+  - Tableau Desktop 2024.2.1+ (research R9) og installation af REST API Connector fra Tableau Exchange (JDBC-`.jar` i `Drivers`-mappen på macOS og Windows og genstart).
+  - Én datakilde med alle otte tabeller: base-URL, Bearer-token = `BI_API_KEY`, tabellerne og stierne fra `GET /api/analytics`, fakta som basistabeller ("New Base Table") og de ti relationer præcis som i data-model.md § Relationer i Tableau. Ingen relation mellem to fakta.
+  - Performance Options: standarden Many / Many og Some records match på alle ti relationer. Relation 10 (`Nøgletal.year` ↔ `Kalender.year`) **skal** være Many / Many.
+  - Felttyper og roller: `date`, `checkIn` og `checkOut` som Date, `year` som Number (whole) på begge sider af relation 10, `year` og `month` som diskrete dimensioner, `countryCode` med rollen Country/Region og `generatedAt` som Date & Time.
+  - Hvert ark med tabel, felter og aggregering: nøgletalsfliser, belægning pr. måned (`SUM([soldRoomNights]) / SUM([availableRoomNights])`, aldrig AVG), indtjening pr. værelsestype × sæson, indtjening pr. land og pr. værelsestype med topliste, gæster og bookinger pr. land, baromsætning pr. drink, cocktails vs. kaffe, **kundetilfredshed** (fra Nøgletal, 003 FT12) og "Data opdateret". Kun SUM, COUNT, filtrering og sortering (FR-011).
+  - Dashboardet: layout, filtre på år (ét år ad gangen, standard indeværende år), måned, sæson, værelsestype og land, hver anvendt med "Apply to Worksheets → Selected Worksheets" efter filtermatrixen i data-model.md, og teksten om, at nøgletalsfliserne og cocktail/kaffe-andelen kun følger år.
+  - **Use as Filter**: på lande- og værelsestypearkene, og målarkene for de genererede filterhandlinger rettes under Dashboard → Actions, så et klik følger filtermatrixen.
+  - Opdatering med Data → Refresh All Extracts og ingen extract-filtre (research R9).
+  - Gem som packaged workbook `tableau/kong-arthur.twbx`.
+  - Fejlfinding: `HTTP error (404) … Unable to connect to the REST API server` på base-URL'en (`GET /api/analytics` skal svare 200 med otte tabeller), 401 (forkert eller manglende nøgle), "No such table" (Tableau før 2024.2.1), tal, der ganges op eller forsvinder (forkert relation, felttype eller Performance Options), og et land, der ændrer belægning eller barsalg (filter eller handling anvendt på forkerte ark).
+  - Trin, der ikke er bekræftet i Tableaus dokumentation (research R8 "Verificeres i Tableau"), markeres **verificeres i Tableau**.
+- [X] T045 [P] Tilføj et kort Tableau-afsnit i `README.md`: Tableau Desktop 2024.2.1+, REST API Connector, `BI_API_KEY`, én fil `tableau/kong-arthur.twbx` med én datakilde og links til `docs/tableau-guide.md` og `specs/002-bi-dashboard/quickstart.md` Del 2. Ingen byggetrin i README.
+- [X] T046 [P] Opdatér `specs/002-bi-dashboard/quickstart.md`: Del 1 scenarie 10–16 (otte tabeller, de tre dimensioner, fjernede faktafelter, nøgletal for kalenderens år), Del 2 som verifikation af workbooken (tal mod `/analytics/kpis` og SQL, filtre efter filtermatrixen) med link til `docs/tableau-guide.md` og SC-006/SC-007 i Del 3.
+
+### Workbook (manuelt af gruppen, efter T043 og T044)
+
+- [ ] T047 Installér REST API Connector i Tableau Desktop 2024.2.1+ efter `docs/tableau-guide.md`, tjek versionen under Help → About Tableau, og opret mappen `tableau/` i repo-roden (**erstatter T003**).
+- [ ] T048 [US7] Opret én datakilde med otte tabeller, ti relationer og felttyperne efter `docs/tableau-guide.md`, og gem den i `tableau/kong-arthur.twbx` (afhænger af T043, T044 og T047) (**erstatter T009**).
+- [ ] T049 Byg arkene i `tableau/kong-arthur.twbx` efter `docs/tableau-guide.md` (afhænger af T048) (**erstatter T012, T013, T014, T017, T020, T023, T024, T027 og T030 samt 003 T042**):
+  - Nøgletalsfliser (FR-006, FR-007, FT5, FT6, FT10, FT11, FT13) og Kundetilfredshed (003 FT12) fra Nøgletal.
+  - Belægning pr. måned (FR-001, FT5), Indtjening pr. værelsestype × sæson (FR-003, FT7), Indtjening pr. land og pr. værelsestype (FR-004, FR-005, FT8, FT9) og Gæster og bookinger pr. land (FR-002, FT6).
+  - Baromsætning pr. drink (FR-009, FT14), Cocktails vs. kaffe (FR-010, FT15) og Data opdateret (FR-016).
+- [ ] T050 [US7] Saml arkene på ét dashboard i `tableau/kong-arthur.twbx` med filtrene, Use as Filter og filterhandlingerne efter filtermatrixen i `specs/002-bi-dashboard/data-model.md` og teksten om nøgletalsfliserne, og gem filen som packaged workbook (afhænger af T049) (**erstatter T032**).
+- [ ] T051 Gennemgå `specs/002-bi-dashboard/quickstart.md` Del 1–3 fra en tom maskine (T1–T10, F1–F6, SC-001–SC-007 og edge casen). Notér de faktiske tal og byggetiden, erstat hvert "verificeres i Tableau" med den faktiske fremgangsmåde i `specs/002-bi-dashboard/quickstart.md`, `specs/002-bi-dashboard/research.md` og `docs/tableau-guide.md`, og notér afvigelser som nye tasks (afhænger af T050) (**erstatter T031 og T035**).
+
+### Afslutning
+
+- [ ] T052 Kør `/speckit-analyze` og `/speckit-converge` for 002, og gem resultatet i `specs/002-bi-dashboard/converge.md` med de erstattede tasks markeret som erstattet (KB-D4) (afhænger af T051) (**erstatter T036**).
+
+### Phase 10: afhængigheder
+
+```text
+T037 (tests, ses fejle) ─┐
+T038 → T039 ─────────────┼─ T040 → T041 → T042 → T043 ─┐
+T044, T045 (parallelt med backend) ─────────────────────┼─ T048 → T049 → T050 → T051 → T052
+T047 ───────────────────────────────────────────────────┘
+```
+
+- T039–T042 committes samlet med T037 og T043 (kontrakt og kode i samme commit, constitution II).
+- T044 bygger på felterne i contracts/README.md og kan skrives, mens backend laves. Tal og
+  skærmbilleder tjekkes i T051.
+- Én person ad gangen redigerer `tableau/kong-arthur.twbx` (T048–T050).

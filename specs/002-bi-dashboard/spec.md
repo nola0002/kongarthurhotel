@@ -23,10 +23,39 @@ A4, A5)"
 ### Session 2026-10-30
 
 - Q: Hvordan forbinder Tableau til API'et, og hvordan sikres læseadgangen? → A: Tableau
-  Desktop (2023.3+) bruger REST API Connector fra Tableau Exchange og henter JSON med HTTP GET
-  til et extract, der opdateres manuelt. Web Data Connector 3.0 er udfaset og bruges ikke.
-  Ledelsen autentificeres med en separat læse-nøgle (`BI_API_KEY`) som Bearer-token. Nøglen
-  gælder kun endpoints under `/api/analytics`, og de er alle GET (FR-013, FR-014).
+  Desktop (2023.3+, fra ændringen 2026-10-30 nedenfor 2024.2.1+) bruger REST API Connector
+  fra Tableau Exchange og henter JSON med HTTP GET til et extract, der opdateres manuelt. Web
+  Data Connector 3.0 er udfaset og bruges ikke. Ledelsen autentificeres med en separat
+  læse-nøgle (`BI_API_KEY`) som Bearer-token. Nøglen gælder kun endpoints under
+  `/api/analytics`, og de er alle GET (FR-013, FR-014).
+
+#### Ændring 2026-10-30: stjerneskema
+
+Brugeren besluttede: "ændre det eksisterende til at være stjerneskema" og "vi vil gerne bare
+have en tableau fil". Svar markeret *(foreslået af AI, afventer gruppen)* er ikke besluttet af
+gruppen endnu og er valgt som den simpleste løsning, der opfylder kravene.
+
+- Q: Hvordan hænger dashboardets data sammen, så et filter rammer rigtigt? → A: Som et
+  stjerneskema i **én** datakilde i **én** workbook (`tableau/kong-arthur.twbx`). Der er tre
+  dimensioner (kalender, værelsestyper og lande) og fem fakta (værelsesnætter, belægning,
+  bookinger, barsalg og nøgletal). Fakta relateres kun til dimensioner og aldrig til hinanden.
+  De fem separate datakilder fra research R1/R3 udgår (FR-012, FR-013).
+- Q: Hvilke filtre rammer hvilke visninger? → A: År rammer alle visninger. Måned og sæson
+  rammer alle visninger undtagen nøgletallene. Værelsestype rammer indtjening, belægning og
+  bookinger. Land rammer indtjening og bookinger. Belægning har intet land, og barsalg har
+  hverken land eller værelsestype, så de filtreres ikke af dem (FR-012).
+- Q: Hvad følger nøgletalsfliserne og cocktail/kaffe-andelen? → A: Kun år. Det er de
+  autoritative årstal fra backend (FR-011). Dashboardet skriver det tydeligt.
+- Q: Hvilken dato placerer en booking i kalenderen? → A: Ankomstdatoen, ligesom antal
+  bookinger og gæster i nøgletallene (FR-002).
+- Q: Hvilke datoer dækker kalenderen? → A: Alle datoer i hele kalenderår fra det første til det
+  sidste år, der har en sæsonperiode, en ankomst, en afrejse eller et barsalg. Datoer uden sæsonperiode har
+  ingen sæson. Så falder ingen række uden for kalenderen *(foreslået af AI, afventer gruppen)*.
+- Q: Hvilke år har nøgletal? → A: De samme år som kalenderen, så hvert år, der kan vælges, har
+  fliser. Et år uden data viser 0 *(foreslået af AI, afventer gruppen)*.
+- Q: Kan man vælge flere år på én gang? → A: Nej, ét år ad gangen (standard: indeværende år),
+  fordi nøgletalsfliserne er pr. år og ikke kan lægges sammen *(foreslået af AI, afventer
+  gruppen)*.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -95,7 +124,8 @@ testdatasættet.
 1. **Given** bookinger fra gæster fra flere lande, **When** dashboardet vises, **Then** vises
    fordelingen af bookinger pr. land, fx som kort eller søjlediagram.
 2. **Given** administratoren klikker på et land, **When** filteret anvendes, **Then** filtreres
-   de øvrige visninger til det land (interaktivitet, FT16).
+   indtjenings- og bookingvisningerne til det land, mens belægning, barsalg og nøgletal er
+   uændrede, fordi de ikke har et land (interaktivitet, FT16, US7).
 
 ---
 
@@ -160,16 +190,56 @@ efter den aftalte opdateringsfrekvens. Ingen handling i dashboardet kan ændre d
 
 ---
 
+### User Story 7 - Filtre, der betyder det samme overalt (Priority: P1)
+
+*Tilføjet 2026-10-30 (stjerneskema).*
+
+Som hoteladministrator ønsker jeg, at år, måned, sæson, værelsestype og land filtrerer alle
+visninger, hvor valget giver mening, og ingen andre, så tallene på dashboardet altid hører til
+samme udsnit og aldrig bliver misvisende.
+
+**Why this priority**: FR-012 og FT16 er Must. Et filter, der rammer forkert (fx et land, der
+ændrer belægningen), giver ledelsen forkerte tal.
+
+**Independent Test**: Med det kendte datasæt vælges ét filter ad gangen. Tallene i hver visning
+sammenlignes med API'ets nøgletal og en manuel optælling (quickstart Del 2).
+
+**Acceptance Scenarios**:
+
+1. **Given** administratoren vælger år 2026, **When** filteret anvendes, **Then** viser alle
+   visninger kun 2026, og nøgletalsfliserne viser 2026's nøgletal.
+2. **Given** administratoren vælger Højsæson, **When** filteret anvendes, **Then** viser
+   indtjening og belægning kun nætter i højsæsonen, bookinger kun dem med ankomst i højsæsonen
+   og barsalg kun salg i højsæsonen, mens nøgletalsfliserne er uændrede.
+3. **Given** administratoren vælger Tyskland (filter eller klik), **When** filteret anvendes,
+   **Then** ændres indtjening og bookinger, mens belægning, barsalg og nøgletalsfliserne er
+   uændrede.
+4. **Given** administratoren vælger værelsestypen Suite, **When** filteret anvendes, **Then**
+   ændres indtjening, belægning og bookinger, mens barsalg og nøgletalsfliserne er uændrede.
+5. **Given** dashboardet åbnes, **When** administratoren ser filterlisterne, **Then** står alle
+   værelsestyper og lande i listerne, også dem uden salg i det valgte år.
+
+---
+
 ### Edge Cases
 
 - Et år eller en periode uden data viser 0 eller "ingen data" i stedet for fejl eller tomme
   diagrammer uden forklaring.
 - Ophold over årsskifte eller sæsonskifte: Nætterne fordeles på den periode, de ligger i.
 - Slettede bookinger indgår ikke i nogen nøgletal.
-- Bookinger uden registreret land vises som "Ukendt" og udelades ikke.
+- Bookinger uden registreret land kan ikke opstå: `bookings.country_code` er `NOT NULL` med fremmednøgle til `countries` (data-model § Edge cases). Der er derfor ingen "Ukendt"-kategori.
 - Hvis en drink ikke længere er på drinkkortet, indgår dens historiske salg stadig.
 - Nøgletalskilden er utilgængelig: Dashboardet viser tidspunktet for seneste vellykkede
   opdatering.
+- Et land eller en værelsestype vælges: Belægning har intet land, og barsalg har hverken land
+  eller værelsestype. De visninger ændres ikke (US7).
+- En sæson eller måned vælges: Valget rammer alle visninger undtagen nøgletalsfliserne. En
+  booking hører til sin ankomstdato, en værelsesnat til sin egen dato og et barsalg til
+  salgsdatoen.
+- En dato ligger uden for alle sæsonperioder: Rækken tæller stadig med under sit år og sin
+  måned, men har ingen sæson. Ingen række forsvinder, fordi kalenderen dækker hele år.
+- Et år uden data vælges: Nøgletalsfliserne viser 0, og de øvrige visninger er tomme.
+- Nøgletalsfliserne følger kun år-filteret. Det står på dashboardet.
 
 ## Requirements *(mandatory)*
 
@@ -191,15 +261,30 @@ efter den aftalte opdateringsfrekvens. Ingen handling i dashboardet kan ændre d
 - **FR-011** (A4): Alle nøgletal i FR-001–FR-010 MUST beregnes ét sted i systemets logik og
   leveres færdigberegnet til dashboardet. Dashboardet MUST NOT have sin egen
   beregningslogik for nøgletallene, ud over aggregering og filtrering til visning.
-- **FR-012** (FT16): Dashboardet MUST være interaktivt med mindst filtrering på år, sæson,
-  værelsestype og land, og valg i én visning MUST kunne filtrere de øvrige.
+- **FR-012** (FT16): Dashboardet MUST være interaktivt med filtrering på år, måned, sæson,
+  værelsestype og land, og valg i én visning (fx et klik på et land) MUST kunne filtrere de
+  øvrige. Filtrering sker via fælles dimensioner (kalender, værelsestype, land) og MUST kun
+  ramme visninger, hvis data har dimensionen: år rammer alle visninger. Måned og sæson rammer
+  alle visninger undtagen nøgletallene, som kun følger år. Værelsestype rammer indtjening,
+  belægning og bookinger. Land rammer indtjening og bookinger. *(Ændret 2026-10-30,
+  stjerneskema.)*
 - **FR-013** (FT4, A5): Dashboardet MUST hente data fra systemets API og MUST NOT forbinde
-  direkte til databasen eller kun bygge på en statisk CSV-eksport.
+  direkte til databasen eller kun bygge på en statisk CSV-eksport. Dashboardet MUST leveres
+  som én workbook med én datakilde, der samler alle API'ets analysetabeller. *(Ændret
+  2026-10-30.)*
 - **FR-014** (FT17): Dashboardet MUST være skrivebeskyttet. Det må ikke kunne oprette, ændre
   eller slette data.
 - **FR-015**: Indtjening fra et ophold MUST fordeles pr. nat på den sæson, den måned og det år,
   natten ligger i.
 - **FR-016**: Dashboardet MUST vise tidspunktet for, hvornår data sidst blev opdateret.
+- **FR-017** (FT16, A4): Systemet MUST levere kalender, værelsestyper og lande som opslagsdata
+  afledt af de eksisterende data, uden nye tabeller. Kalenderen MUST dække alle datoer i hele
+  de kalenderår, der har en sæsonperiode, en ankomst, en afrejse eller et barsalg, så ingen
+  række falder uden for et filter *(foreslået af AI, afventer gruppen)*. Lister over
+  værelsestyper og lande MUST indeholde alle, også dem uden salg. *(Tilføjet 2026-10-30.)*
+- **FR-018** (FT5–FT15): Nøgletallene pr. år MUST findes for hvert år i kalenderen, så hvert
+  år, der kan vælges, har nøgletal (0, når der ingen data er) *(foreslået af AI, afventer
+  gruppen)*. *(Tilføjet 2026-10-30.)*
 
 ### Key Entities *(include if feature involves data)*
 
@@ -210,6 +295,12 @@ Sæson, Pris, Booking, Drink, Barsalg) og indfører ingen nye stamdata.
   (år, sæson, måned, værelsestype, land, drink, kategori).
 - **Værelsesnat**: Én nat for ét værelse i én booking. Det er den mindste enhed for
   belægningsgrad og fordeling af indtjening.
+- **Dimension** *(2026-10-30)*: Opslagsdata, som alle visninger filtreres gennem: kalenderdag
+  (dato, år, måned, sæson), værelsestype (navn, kapacitet, antal værelser) og land (kode,
+  navn). Beskrivende oplysninger bor kun i dimensionerne.
+- **Fakta** *(2026-10-30)*: Værelsesnat, belægningsdag, booking, barsalg og nøgletal. Hver
+  faktarække har kun nøgler til dimensionerne og sine egne tal og er aldrig koblet direkte til
+  en anden faktatype.
 
 ## Success Criteria *(mandatory)*
 
@@ -224,20 +315,28 @@ Sæson, Pris, Booking, Drink, Barsalg) og indfører ingen nye stamdata.
 - **SC-004**: En ny booking eller et nyt barsalg indgår i dashboardet, næste gang det åbnes
   eller opdateres manuelt, i 100 % af testene.
 - **SC-005**: Ingen brugerhandling i dashboardet kan ændre data i systemet.
+- **SC-006** *(2026-10-30)*: I quickstart-tjekket ændrer et valgt land 0 tal i belægning,
+  barsalg og nøgletalsfliser, og et valgt år, måned eller sæson giver de samme tal som en
+  manuel optælling i 100 % af visningerne.
+- **SC-007** *(2026-10-30)*: Hele dashboardet ligger i én fil, og gruppen kan bygge det fra
+  bunden efter byggevejledningen på højst 2 timer.
 
 ## Assumptions
 
 - Indtjening betyder værelsesindtjening (summen af bookingernes gemte priser) og barsalg hver
   for sig. De vises separat og lægges ikke sammen, medmindre det er udtrykkeligt angivet.
-- "Året" betyder kalenderår, som kan vælges. Standard er indeværende år.
+- "Året" betyder kalenderår, som kan vælges. Standard er indeværende år. Der vælges ét år ad
+  gangen, fordi nøgletalsfliserne er pr. år *(foreslået af AI, afventer gruppen)*.
 - Tilgængelige værelsesnætter = antal værelser × antal dage i perioden. Værelser ude af drift
   modelleres ikke.
 - Cocktails vs. kaffe opgøres på omsætning. Antal solgte enheder vises som supplement.
 - Kundetilfredshed (FT12, Could) er uden for scope, da der ikke findes data. Det nævnes i
-  præsentationen som en mulig udvidelse.
+  præsentationen som en mulig udvidelse. *(Ændret af 003: FT12 er Must og vises som flise
+  "Kundetilfredshed" fra nøgletallene.)*
 - Tableau Desktop er det valgte BI-værktøj (FT16). Det kan hente direkte fra API'et, der
   kører lokalt i Docker. Dashboardet deles med ledelsen som visning uden
-  redigeringsrettigheder.
+  redigeringsrettigheder. Stjerneskemaet i én datakilde kræver Tableau Desktop 2024.2.1 eller
+  nyere (research R9).
 - Datagrundlaget er genereret testdata, der er stort nok til, at sæson-, lande- og
   drinkfordelinger giver mening.
 - Datagrundlaget leveres af `001-backoffice-bookinger`, inkl. gæstens land på hver booking og

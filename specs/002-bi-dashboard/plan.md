@@ -24,6 +24,13 @@ Bearer-token (`BI_API_KEY`). Det må kun summere, filtrere og sortere. Der er in
 tabeller og ingen nye afhængigheder. Detaljerede beslutninger står i
 [research.md](research.md).
 
+> **Ændring 2026-10-30: stjerneskema.** Workbooken får **én** datakilde i stedet for fem.
+> Backend får tre nye dimensionsendpoints (`/analytics/calendar`, `/analytics/room-types`,
+> `/analytics/countries`), og fakta mister de beskrivende felter `year`, `month`, `season` og
+> `country`. Fakta relateres kun til dimensioner i Tableaus multi-fact-model, så hvert filter
+> kun rammer de fakta, der har dimensionen. Det kræver Tableau Desktop 2024.2.1+. Se
+> [§ Ændring 2026-10-30](#ændring-2026-10-30-stjerneskema), research R8–R11 og tasks Phase 10.
+
 ## Technical Context
 
 **Language/Version**: JavaScript (ES modules) på Node.js 24 LTS, som i 001.
@@ -31,7 +38,8 @@ tabeller og ingen nye afhængigheder. Detaljerede beslutninger står i
 **Primary Dependencies**:
 - Backend: uændret fra 001 (Express 5.3, mysql2 3.x, express-openapi-validator 5.6,
   cookie-session 2.1). Ingen nye pakker.
-- BI: Tableau Desktop 2023.3+ med REST API Connector 1.0.1 fra Tableau Exchange (research R1).
+- BI: Tableau Desktop **2024.2.1+** (research R9, før 2026-10-30: 2023.3+) med REST API Connector
+  1.0.1 fra Tableau Exchange (research R1, R8).
 
 **Storage**: MySQL 8.4 fra 001. Skemaet er uændret. Alt afledes ved hvert kald (research R6,
 [data-model.md](data-model.md)). Tableau gemmer et extract i workbooken.
@@ -56,7 +64,8 @@ extracts tager under et minut. Tallene er skøn og måles ved quickstart.
 - Skrivebeskyttet: kun `GET`, og nøglen gælder kun `/api/analytics` (FR-014, FT17).
 - Ingen AI i UI (KB-T8). Fremlæggelse 2026-11-06.
 
-**Scale/Scope**: 5 endpoints, 1 ny miljøvariabel, ca. 8 ark på ét dashboard.
+**Scale/Scope**: 5 endpoints, 1 ny miljøvariabel, ca. 8 ark på ét dashboard. Fra 2026-10-30:
+8 endpoints (5 fakta + 3 dimensioner) i én datakilde, ca. 10 ark på ét dashboard i én workbook.
 
 ## Constitution Check
 
@@ -66,11 +75,11 @@ extracts tager under et minut. Tallene er skøn og måles ved quickstart.
 |---|---|---|---|
 | I. Trelagsarkitektur | Præsentation → logik → data. Kun repositories kender SQL | `routes/analytics.js` → `services/analyticsService.js` → `repositories/analyticsRepository.js`. Servicen kender hverken `req`/`res` eller SQL | ✅ |
 | II. API-først + OpenAPI | Tableau taler kun med API'et. Kontrakten i repoet og Swagger | Tableau bruger REST API Connector mod `/api/analytics` (research R1). Endpoints og Bearer-skema står i `backend/openapi.yaml` i samme commit | ✅ |
-| III. Logik og nøgletal i logiklaget | Tableau genberegner ikke nøgletal | Fordeling, belægning, gennemsnit og andele ligger i `analyticsService` (research R4). Tableau summerer, filtrerer og sorterer og viser belægning for et udsnit som forholdet mellem to backend-summer, som constitution v1.2.1 tillader | ✅ |
+| III. Logik og nøgletal i logiklaget | Tableau genberegner ikke nøgletal | Fordeling, belægning, gennemsnit og andele ligger i `analyticsService` (research R4). Tableau summerer, filtrerer og sorterer og viser belægning for et udsnit som forholdet mellem to backend-summer, som constitution v1.2.1 tillader. Stjerneskemaet (2026-10-30) flytter ingen formler: kalenderen, kalenderårene og dimensionerne afledes i `analyticsService`, og Tableau relaterer og filtrerer kun | ✅ |
 | IV. Container og reproducerbart miljø | Én `docker compose up`, reproducerbart skema | Ingen nye containere eller tabeller. `BI_API_KEY` kommer i `.env.example`. Compose læser allerede `.env` | ✅ |
 | V. Testbar forretningslogik | Nøgletal har tests, én kommando | `backend/test/analyticsService.test.js` dækker FR-001–FR-003, FR-006–FR-008, FR-010 og FR-015 med falsk repository (testnavne med FT-ID). `api.test.js` dækker FR-014 | ✅ |
-| VI. Enkelhed og ejerskab | YAGNI, ingen AI i UI | Ingen nye pakker, tabeller, views eller cache. Ingen query-parametre eller paginering (research R3). WDC-kode er fravalgt | ✅ |
-| Retningslinjer | `AGENTS.md`, `docs/retningslinjer/*` | Penge i øre i servicen og kroner ved kanten (`money.js`). Parametriseret SQL. Ingen afledte data gemmes. Fejlformat `{error:{code,message,field}}` | ✅ |
+| VI. Enkelhed og ejerskab | YAGNI, ingen AI i UI | Ingen nye pakker, tabeller, views eller cache. Ingen query-parametre eller paginering (research R3). WDC-kode er fravalgt. Stjerneskemaet genbruger eksisterende repository-funktioner (ingen ny SQL til kalenderen) og giver én fil i stedet for fem datakilder | ✅ |
+| Retningslinjer | `AGENTS.md`, `docs/retningslinjer/*` | Penge i øre i servicen og kroner ved kanten (`money.js`). Parametriseret SQL. Ingen afledte data gemmes. Fejlformat `{error:{code,message,field}}`. Stjerneskemaet følger samme 3NF-tanke som databasen: beskrivende felter bor ét sted (dimensionerne) | ✅ |
 
 **Gate (før research)**: Bestået. Spørgsmålet om, hvordan Tableau forbinder, og hvilken
 autentificering det kræver, blev afklaret 2026-10-30 (spec.md § Clarifications, research R1–R2).
@@ -88,9 +97,9 @@ belægning for et vilkårligt udsnit. Det er tilladt efter præciseringen af pri
 specs/002-bi-dashboard/
 ├── spec.md              # Krav (/speckit-specify, /speckit-clarify)
 ├── plan.md              # Denne fil
-├── research.md          # Phase 0: beslutninger og begrundelser (R1–R7)
+├── research.md          # Phase 0: beslutninger og begrundelser (R1–R11)
 ├── data-model.md        # Phase 1: afledte entiteter, ingen nye tabeller
-├── quickstart.md        # Phase 1: curl- og Tableau-scenarier, SC-001–SC-005
+├── quickstart.md        # Phase 1: curl-scenarier og verifikation af workbooken, SC-001–SC-007
 ├── contracts/
 │   └── README.md        # peger på backend/openapi.yaml
 ├── checklists/
@@ -108,21 +117,23 @@ Kun nye og ændrede filer. Resten er som i
 .env.example                       # ÆNDRET: BI_API_KEY (placeholder ≥ 32 tegn)
 README.md                          # ÆNDRET: status, Tableau-pil i diagrammet, BI_API_KEY
 backend/
-├── openapi.yaml                   # ÆNDRET: 5 × GET /analytics/*, Bearer-skema
+├── openapi.yaml                   # ÆNDRET: 5 × GET /analytics/*, Bearer-skema (2026-10-30: 8, T042)
 ├── src/
 │   ├── app.js                     # ÆNDRET: createAnalyticsService({ analyticsRepo }) og montering af routeren
 │   ├── auth.js                    # ÆNDRET: session ELLER Bearer BI_API_KEY, kun på /analytics
 │   ├── routes/
-│   │   └── analytics.js           # NY: 5 tynde GET-handlere, kroner ved kanten
+│   │   └── analytics.js           # NY: 5 tynde GET-handlere, kroner ved kanten (2026-10-30: + 3 dimensioner)
 │   ├── services/
 │   │   ├── pricing.js             # ÆNDRET: nat-gennemløbet eksporteres, så der er én definition af en nat
-│   │   └── analyticsService.js    # NY: fordeling pr. nat, belægning, gennemsnit, andele, nøgletal
+│   │   └── analyticsService.js    # NY: fordeling pr. nat, belægning, gennemsnit, andele, nøgletal (2026-10-30: + kalender, dimensioner, færre faktafelter)
 │   └── repositories/
-│       └── analyticsRepository.js # NY: rå rækker (bookinger, perioder, priser, værelser, barsalg)
+│       └── analyticsRepository.js # NY: rå rækker (bookinger, perioder, priser, værelser, barsalg) (2026-10-30: + kapacitet, lande)
 └── test/
     └── analyticsService.test.js   # NY: formler med falsk repository
 tableau/
-└── kong-arthur.twbx               # NY: workbook med extract (se tasks.md)
+└── kong-arthur.twbx               # NY: workbook med extract (se tasks.md). 2026-10-30: én datakilde
+docs/
+└── tableau-guide.md               # NY 2026-10-30: byggevejledning til workbooken (tasks T044)
 ```
 
 **Structure Decision**: Samme web-applikation som 001. De nye backendfiler følger de tre lag
@@ -153,6 +164,35 @@ Bearer-nøgler (research R2).
    opdateringstjek.
 5. **Afslutning**: saml dashboardet med filtre og "Use as Filter", gennemgå quickstart,
    opdatér dokumentation og kør `/speckit-converge`.
+6. **Stjerneskema (2026-10-30)**: tasks Phase 10. Backend og kontrakt først (T037–T043), docs
+   parallelt (T044–T046), derefter workbooken i hånden (T047–T051) og til sidst analyze og
+   converge (T052).
+
+## Ændring 2026-10-30: stjerneskema
+
+**Hvorfor**: Med fem datakilder kobles filtre via fælles feltnavne (blending eller "All Using
+Related Data Sources"). Det er uklart, hvilke ark et filter rammer, og et land kan komme til at
+filtrere belægning eller barsalg via gæsternes ophold. Brugeren bad om ét stjerneskema og én
+Tableau-fil (spec.md § Clarifications, Ændring 2026-10-30).
+
+**Hvad ændres**:
+
+| Lag | Ændring |
+|---|---|
+| Repository | `listRoomTypes` får `capacity`. `listCountries` genbruges fra `referenceRepository` via `analyticsRepository`. Ingen ny SQL til kalenderen |
+| Service | Ny hjælper til kalenderårene (research R10), brugt af både `calendar()` og `kpis()`. Nye `calendar()`, `roomTypes()` og `countries()`. Fakta mister `year`, `month`, `season` og `country` (research R11). Formlerne er uændrede |
+| Route | `TABLES` i `routes/analytics.js` får `calendar`, `room-types` og `countries`. Så lister `GET /analytics` også de nye tabeller |
+| Kontrakt | `backend/openapi.yaml`: tre nye stier og skemaer, fire faktaskemaer uden de fjernede felter og ny beskrivelse af årene i `/analytics/kpis` ([contracts/README.md](contracts/README.md)) |
+| Tests | `analyticsService.test.js`: kalenderen dækker hele år og årene med data, nøgletal for hvert kalenderår, eksisterende tests uden de fjernede felter. `api.test.js`: de nye endpoints kræver adgang og svarer med arrays |
+| Tableau | Én datakilde med 8 tabeller og 10 relationer ([data-model.md § Relationer i Tableau](data-model.md#relationer-i-tableau)). Filtre efter filtermatrixen. Byggevejledning i `docs/tableau-guide.md`. Validering i [quickstart.md](quickstart.md) Del 2 |
+
+**Constitution Check efter ændringen**: Bestået. Ingen nye tabeller, containere eller pakker
+(IV, VI). Kontrakten ændres i samme commit som koden (II). Formlerne bliver i
+`analyticsService` (III). De nye regler (kalenderår) testes med falsk repository (V).
+
+**Tableau-version**: 2024.2.1+ (research R9). Kan gruppen ikke få den version, er alternativet
+de fem datakilder fra før ændringen, og så gælder de gamle tasks T009 og T032 *(foreslået af
+AI, afventer gruppen)*.
 
 ## Complexity Tracking
 
