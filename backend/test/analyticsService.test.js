@@ -41,7 +41,6 @@ const booking = (id, checkIn, checkOut, totalPriceOre, guestCount = 2) => ({
   totalPriceOre,
   roomType: 'Dobbeltværelse',
   countryCode: 'DK',
-  country: 'Danmark',
 })
 
 function service({ bookings = [], periods = PERIODS, roomTypes = [DOUBLE], barSales = [] } = {}) {
@@ -56,6 +55,15 @@ function service({ bookings = [], periods = PERIODS, roomTypes = [DOUBLE], barSa
   })
 }
 
+const sale = (id, date, category, quantity, unitPriceOre) => ({
+  id,
+  date,
+  drink: category,
+  category,
+  quantity,
+  unitPriceOre,
+})
+
 const kpi = (rows, year, name, dimension = null) =>
   rows.find((row) => row.year === year && row.kpi === name && row.dimension === dimension).value
 
@@ -66,11 +74,11 @@ test('FT7: a stay over a season change splits the frozen total by season price, 
     bookings: [booking(1, '2026-05-30', '2026-06-02', 100000)],
   }).roomNights()
   assert.deepEqual(
-    rows.map((row) => [row.date, row.season, row.revenue]),
+    rows.map((row) => [row.date, row.revenue]),
     [
-      ['2026-05-30', 'Lavsæson', 277.77],
-      ['2026-05-31', 'Lavsæson', 277.77],
-      ['2026-06-01', 'Højsæson', 444.46],
+      ['2026-05-30', 277.77],
+      ['2026-05-31', 277.77],
+      ['2026-06-01', 444.46],
     ],
   )
   assert.equal(Math.round(rows.reduce((total, row) => total + row.revenue * 100, 0)), 100000)
@@ -83,10 +91,10 @@ test('FT10: a stay over new year puts each night’s revenue in its own year', a
   })
   const rows = await analytics.roomNights()
   assert.deepEqual(
-    rows.map((row) => [row.year, row.month, row.revenue]),
+    rows.map((row) => [row.date, row.revenue]),
     [
-      [2026, 12, 800],
-      [2027, 1, 500],
+      ['2026-12-31', 800],
+      ['2027-01-01', 500],
     ],
   )
   const kpis = await analytics.kpis()
@@ -123,9 +131,6 @@ test('FT5: 10 rooms and 150 sold room-nights in a 30-day month give 50 % occupan
   assert.equal(occupancy.length, 30)
   assert.deepEqual(occupancy[29], {
     date: '2026-04-30',
-    year: 2026,
-    month: 4,
-    season: 'Mellemsæson',
     roomType: 'Dobbeltværelse',
     availableRoomNights: 10,
     soldRoomNights: 5,
@@ -205,10 +210,10 @@ test('FT6: bookings and guests count in the check-in year, even when the stay cr
   assert.equal(kpi(kpis, 2026, 'guests'), 5)
   assert.equal(kpi(kpis, 2027, 'bookings'), 0)
   assert.deepEqual(
-    (await analytics.bookings()).map((row) => [row.year, row.nights]),
+    (await analytics.bookings()).map((row) => [row.checkIn, row.nights]),
     [
-      [2026, 2],
-      [2026, 3],
+      ['2026-03-10', 2],
+      ['2026-12-30', 3],
     ],
   )
 })
@@ -290,4 +295,69 @@ test('FT12: a stay over new year counts in the check-out year', async () => {
   assert.equal(kpi(kpis, 2026, 'satisfactionResponses'), 0)
   assert.equal(kpi(kpis, 2027, 'customerSatisfaction'), 5)
   assert.equal(kpi(kpis, 2027, 'satisfactionResponses'), 1)
+})
+
+test('FT16: the calendar covers whole years, and a date outside every season period has season null', async () => {
+  // Season period only in April 2026, a bar sale in July 2027 → every date of 2026 and 2027 = 365 + 365
+  const calendar = await service({
+    periods: [{ seasonId: 2, seasonName: 'Mellemsæson', startDate: '2026-04-01', endDate: '2026-04-30' }],
+    barSales: [sale(1, '2027-07-01', 'Kaffe', 1, 5000)],
+  }).calendar()
+  assert.equal(calendar.length, 730)
+  assert.deepEqual(calendar[0], { date: '2026-01-01', year: 2026, month: 1, season: null })
+  assert.deepEqual(
+    calendar.find((day) => day.date === '2026-04-15'),
+    { date: '2026-04-15', year: 2026, month: 4, season: 'Mellemsæson' },
+  )
+  assert.deepEqual(calendar.at(-1), { date: '2027-12-31', year: 2027, month: 12, season: null })
+})
+
+test('FT16: the KPIs have a row set for every calendar year, also a year without any data', async () => {
+  // Periods cover 2026–2027 and a bar sale is in 2029, so 2028 has no data but is still in the calendar
+  const analytics = service({
+    bookings: [booking(1, '2026-03-10', '2026-03-12', 100000)],
+    barSales: [sale(1, '2029-01-05', 'Kaffe', 1, 5000)],
+  })
+  const calendarYears = [...new Set((await analytics.calendar()).map((day) => day.year))]
+  const kpis = await analytics.kpis()
+  assert.deepEqual(calendarYears, [2026, 2027, 2028, 2029])
+  assert.deepEqual([...new Set(kpis.map((row) => row.year))], calendarYears)
+  assert.equal(kpi(kpis, 2028, 'bookings'), 0)
+  assert.equal(kpi(kpis, 2028, 'barRevenue'), 0)
+})
+
+test('FT16: facts only have keys to the dimensions and their own measures', async () => {
+  // year, month, season and the country name live in the calendar and country dimensions (R11)
+  const analytics = service({
+    bookings: [{ ...booking(1, '2026-03-10', '2026-03-11', 50000), satisfactionScore: null }],
+    barSales: [sale(1, '2026-03-10', 'Kaffe', 1, 5000)],
+  })
+  const fields = async (rows) => Object.keys((await rows)[0]).sort()
+  assert.deepEqual(await fields(analytics.roomNights()), ['bookingId', 'countryCode', 'date', 'revenue', 'roomType'])
+  assert.deepEqual(await fields(analytics.occupancy()), [
+    'availableRoomNights',
+    'date',
+    'occupancyRate',
+    'roomType',
+    'soldRoomNights',
+  ])
+  assert.deepEqual(await fields(analytics.bookings()), [
+    'bookingId',
+    'checkIn',
+    'checkOut',
+    'countryCode',
+    'guestCount',
+    'nights',
+    'revenue',
+    'roomType',
+    'satisfactionScore',
+  ])
+  assert.deepEqual(await fields(analytics.barSales()), ['category', 'date', 'drink', 'quantity', 'revenue', 'saleId'])
+})
+
+test('FT16: the calendar works with as many rows as the real data', async () => {
+  // The seed has 130k+ bar sales; spreading their years into Math.min overflowed the call stack.
+  // PERIODS cover 2026–2027 → 365 + 365 dates
+  const barSales = Array.from({ length: 200_000 }, (_, i) => sale(i, '2026-03-10', 'Kaffe', 1, 5000))
+  assert.equal((await service({ barSales }).calendar()).length, 730)
 })

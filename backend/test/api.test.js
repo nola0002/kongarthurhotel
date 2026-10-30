@@ -380,4 +380,42 @@ describe('API', { skip: !process.env.DB_HOST && 'needs MySQL: run with docker co
     assert.equal(res.status, 200)
     assert.ok(Array.isArray(await res.json()))
   })
+
+  const DIMENSIONS = ['calendar', 'room-types', 'countries']
+
+  test('FT16: /analytics lists the five facts and the three dimensions', async () => {
+    const res = await call('/analytics', { headers: { Authorization: `Bearer ${BI_KEY}` } })
+    assert.equal(res.status, 200)
+    const tables = await res.json()
+    assert.deepEqual(
+      tables.map((row) => row.table),
+      ['room-nights', 'occupancy', 'bookings', 'bar-sales', 'kpis', ...DIMENSIONS],
+    )
+    assert.ok(tables.every((row) => row.path === `/api/analytics/${row.table}`))
+  })
+
+  test('FT17: the BI key reads the dimensions, and they are 401 without a key', async () => {
+    for (const table of DIMENSIONS) {
+      const res = await call(`/analytics/${table}`, { headers: { Authorization: `Bearer ${BI_KEY}` } })
+      assert.equal(res.status, 200, table)
+      assert.ok((await res.json()).length > 0, table)
+      assert.equal((await call(`/analytics/${table}`)).status, 401, table)
+    }
+  })
+
+  test('FT16: the room-type dimension counts rooms per type, 0 for a type without rooms', async () => {
+    const res = await authed('/analytics/room-types')
+    assert.deepEqual(await res.json(), [
+      { roomType: 'Dobbeltværelse', capacity: 2, rooms: 2 },
+      { roomType: 'Suite', capacity: 4, rooms: 0 },
+    ])
+  })
+
+  test('FT16: the country dimension lists every country by name, also those without bookings', async () => {
+    const res = await authed('/analytics/countries')
+    assert.deepEqual(await res.json(), [
+      { countryCode: 'DK', country: 'Danmark' },
+      { countryCode: 'SE', country: 'Sverige' },
+    ])
+  })
 })
