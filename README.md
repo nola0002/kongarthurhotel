@@ -3,9 +3,11 @@
 Back office til receptionen (bookinger og barsalg) og data til ledelsens Tableau-dashboard.
 Stack: Docker Compose, MySQL 8.4, Node.js 24 + Express 5 og React 19 + Tailwind 4.
 
-Back office (feature [001](specs/001-backoffice-bookinger/spec.md)) er bygget. Til
-Tableau-dashboardet (feature [002](specs/002-bi-dashboard/spec.md)) er backend-API'et bygget,
-og workbooken er under arbejde.
+Back office (feature [001](specs/001-backoffice-bookinger/spec.md)), receptionsoverblik med
+belægningsplan og kundetilfredshed ([003](specs/003-receptionsoverblik/spec.md)) og opgavens data
+([004](specs/004-opgavedata/spec.md)) er bygget. Til Tableau-dashboardet
+([002](specs/002-bi-dashboard/spec.md)) er REST-API'et med stjerneskemaet bygget. Workbooken bygges
+efter [`docs/tableau-guide.md`](docs/tableau-guide.md).
 
 ## Arkitektur
 
@@ -164,8 +166,12 @@ curl -i -X DELETE http://localhost:3000/api/bookings/<id> \
 
 Tableau henter data fra `GET /api/analytics/*` med headeren
 `Authorization: Bearer <BI_API_KEY>` fra `.env`. Nøglen giver kun læseadgang og virker kun
-på `/api/analytics`. Ligesom bookingsystemets nøgle skal den være mindst 32 tegn. Opsætning af
-Tableau og validering står i [`quickstart.md`](specs/002-bi-dashboard/quickstart.md).
+på `/api/analytics`. Ligesom bookingsystemets nøgle skal den være mindst 32 tegn.
+
+Dashboardet er én fil, `tableau/kong-arthur.twbx`, med én datakilde og kræver Tableau Desktop
+2024.2.1+ med REST API Connector. Byggetrinene står i
+[`docs/tableau-guide.md`](docs/tableau-guide.md), og tallene tjekkes med
+[`quickstart.md`](specs/002-bi-dashboard/quickstart.md) Del 2.
 
 ## Daglig brug
 

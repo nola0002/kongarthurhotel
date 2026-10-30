@@ -51,7 +51,7 @@ Oversigt over al dokumentation i repoet. Start med [README](../README.md) for at
 | [`tasks.md`](../specs/001-backoffice-bookinger/tasks.md) | Opgaveliste (T001–T071) |
 | [`converge.md`](../specs/001-backoffice-bookinger/converge.md) | Implementeret vs. mangler (KB-D4) |
 | [`checklists/requirements.md`](../specs/001-backoffice-bookinger/checklists/requirements.md) | Kvalitetstjek af spec'en |
-| [`002-bi-dashboard/spec.md`](../specs/002-bi-dashboard/spec.md) | Tableau-dashboardet (specificeret, ikke planlagt endnu) |
+| [`002-bi-dashboard/spec.md`](../specs/002-bi-dashboard/spec.md) | Tableau-dashboardet: REST API-nøgletal og stjerneskema. Byggevejledning i [`tableau-guide.md`](tableau-guide.md) |
 
 ## Single source of truth
 
