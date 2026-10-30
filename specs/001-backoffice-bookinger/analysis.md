@@ -210,6 +210,7 @@ kommentar om at ændre dem. `.env` er i `.gitignore`.
 ### B11 Tests
 - `db/00_test-db.sh` (init-script):
   `docker_process_sql --database=mysql <<<"CREATE DATABASE IF NOT EXISTS kongarthur_test; GRANT ALL ON kongarthur_test.* TO '$MYSQL_USER'@'%';"`
+  Implementeret som et direkte `mysql`-kald som root i stedet (se tasks.md T007, Afvigelse).
 - `setupTestDb()` kører `DROP DATABASE IF EXISTS` + `CREATE` + skema + fixture **hver**
   kørsel.
 - `api.test.js` kalder `setupTestDb()` og derefter `const { default: app } = await import('../src/app.js')`,
@@ -233,7 +234,7 @@ kommentar om at ændre dem. `.env` er i `.gitignore`.
 - DATETIME returneres som `'YYYY-MM-DDTHH:mm:ss'` (lokal tid, `replace(' ', 'T')`).
   Kontrakten bruger `type: string` med beskrivelsen "Lokal tid (Europe/Copenhagen), ISO uden
   offset" i stedet for `format: date-time`.
-- Frontend: `TODAY = new Date().toLocaleDateString('sv-SE')` bruges kun til visning (relative
+- Frontend: `today()` (tidligere konstanten `TODAY`, nu en funktion, så datoen skifter ved midnat) `= new Date().toLocaleDateString('sv-SE')` bruges kun til visning (relative
   datoer). Status kommer fra API'et.
 
 ### B14 Frontend og design

@@ -1,42 +1,19 @@
 # Quickstart: validering af Back Office (001)
 
 Formålet er at bevise, at featuren virker fra ende til anden. Kontrakten står i
-[`contracts/openapi.yaml`](contracts/openapi.yaml) (efter T001 i `backend/openapi.yaml`), og datamodellen i
+[`backend/openapi.yaml`](../../backend/openapi.yaml), og datamodellen i
 [`data-model.md`](data-model.md).
-
-## Forudsætninger
-
-- Docker Desktop med Docker Compose v2.
-- Port 3000 (API) og 5173 (frontend og Swagger UI) er ledige.
-- `.env.example` indeholder kun udviklings-placeholders. De virker lokalt, men skal ændres
-  uden for udvikling.
 
 ## Start
 
-```bash
-cp .env.example .env && docker compose up --build
-```
-
-Systemet er klar, når backend logger `API listening on :3000`. Backend venter selv på
-MySQL's healthcheck (KB-T4). Efter ændrede afhængigheder: `docker compose up --build -V`.
-
-| Hvad | URL |
-|---|---|
-| Back office | http://localhost:5173 |
-| API | http://localhost:3000/api |
-| Swagger UI | http://localhost:5173/docs |
-
-Login: brugernavn og adgangskode fra `.env` (`SEED_USERNAME` / `SEED_PASSWORD`, standard
-`reception` / `skift-mig`). Kontoen er ikke i seed. Backend opretter den med
-`ensureSeedUser()` ved start, når `users` er tom. En senere ændring af `SEED_PASSWORD` kræver
-derfor en nulstilling af data.
-
-**Nulstil data** (efter ændring af `db/*.sql`, fordi init-scripts kun kører på et tomt
-volume):
+Start, login, Swagger UI, nulstilling og fejlfinding står ét sted:
+[README § Kom i gang](../../README.md#kom-i-gang). Valideringen starter fra en tom maskine:
 
 ```bash
-docker compose down -v && docker compose up --build
+docker compose down -v && cp .env.example .env && docker compose up --build
 ```
+
+Systemet er klar, når backend logger `API listening on :3000`.
 
 ## Valideringsscenarier
 
@@ -63,18 +40,12 @@ Hvert scenarie svarer til acceptkriterier i [`spec.md`](spec.md).
 
 ### Scenarie 14: eksternt bookingsystem
 
-```bash
-curl -i -X POST http://localhost:3000/api/bookings \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $(grep BOOKING_SYSTEM_API_KEY .env | cut -d= -f2)" \
-  -d '{"guestName":"Test Ekstern","countryCode":"DE","roomTypeId":2,
-       "checkIn":"2027-01-10","checkOut":"2027-01-12","guestCount":2}'
-```
+Kør `curl`-kaldet i [README § Eksternt bookingsystem](../../README.md#eksternt-bookingsystem-curl).
 
 Forventet: `201 Created` med `"source": "booking_system"`.
 
 Fejlvarianter:
-- Uden header eller med forkert nøgle: `401`.
+- Uden header og uden cookie, eller med forkert nøgle: `401`.
 - Med en overlappende, udsolgt periode: `409` med `ROOM_TYPE_FULLY_BOOKED`.
 
 I drift sendes kaldet over HTTPS gennem en reverse proxy (se `research.md` R7).
@@ -88,14 +59,3 @@ docker compose exec backend npm test
 Forventet: alle tests grønne. Tests af forretningsregler og priser (FR-006–FR-008, FR-010a)
 kører uden database (falske repositories). API-testene nulstiller og bruger databasen
 `kongarthur_test` og rører ikke udviklingsdata.
-
-## Genskab testdata
-
-```bash
-docker compose run --rm backend node scripts/generate-seed.js   # skriver db/02_seed.sql
-# eller på host: node backend/scripts/generate-seed.js
-docker compose down -v && docker compose up --build
-```
-
-Seed er deterministisk (fast PRNG-seed og faste datoer 2025-01-01 til 2027-02-28), så samme
-script giver samme fil.

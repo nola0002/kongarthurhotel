@@ -4,7 +4,8 @@
 
 Modellen følger `docs/retningslinjer/database.md`: 3NF, constraints i databasen, `snake_case`,
 tabeller i flertal og `DECIMAL` til penge. Ved implementering bliver `db/01_schema.sql`
-sandheden. Dette dokument beskriver designet og begrundelserne.
+sandheden. Dette dokument beskriver designet og begrundelserne. Er de uenige, gælder
+`db/01_schema.sql`.
 
 ## ER-oversigt
 
@@ -88,8 +89,14 @@ Ren relationstabel, så den har sammensat primærnøgle `(room_type_id, season_i
 | `source` | `ENUM('backoffice','booking_system')` | NOT NULL, DEFAULT `'backoffice'` |
 | `created_at` | `DATETIME` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP` |
 
+> **Ændret af 004**: `guest_name` er erstattet af `first_name VARCHAR(75)` og
+> `family_name VARCHAR(75)`, begge `NOT NULL` med `CHECK (CHAR_LENGTH(TRIM(...)) > 0)` (1NF).
+> Indexet på `guest_name` er fjernet uden erstatning, fordi søgningen er `LIKE '%…%'`. Se
+> [004 data-model](../004-opgavedata/data-model.md).
+
 - Indexes: `(room_id, check_in, check_out)` til overlap-tjek, `(check_in)` til listen og
-  `(guest_name)` til søgning (FR-002).
+  `(guest_name)` til søgning (FR-002). Søgningen ignorerer store/små bogstaver og accenter,
+  fordi tabellerne bruger MySQL 8.4's standard-collation `utf8mb4_0900_ai_ci`.
 - **Gæsten ligger på bookingen.** Der er ingen gæsteidentitet (fx e-mail) i scope, så en
   `guests`-tabel ville være 1:1 med bookingen. Modellen er stadig 3NF, og sletning af en
   booking fjerner gæstens persondata.
@@ -192,7 +199,12 @@ Alle summer i SQL bruger `COALESCE(SUM(…), 0)`, så en tom periode giver 0 og 
 | Pris findes for alle nætter | – | ja | `PRICE_NOT_CONFIGURED` 422 |
 | Land findes (ikke i quote) | FK | ja | `VALIDATION_ERROR` 400 (felt `countryCode`) |
 | Barsalg på booking kun hvis gæsten bor på hotellet på salgsdatoen (FR-010a) | – | ja | `BOOKING_NOT_IN_HOUSE` 422 (felt `bookingId`) |
+| Drink findes | FK | ja ("Ukendt drink") | `VALIDATION_ERROR` 400 (felt `drinkId`) |
 | Antal drinks ≥ 1 | `CHECK` + OpenAPI | – | `VALIDATION_ERROR` 400 |
+
+> **Ændret af 004**: Reglen "Gæstens navn udfyldt" er erstattet af "Fornavn udfyldt" (felt
+> `firstName`) og "Efternavn udfyldt" (felt `familyName`). Se
+> [004 data-model](../004-opgavedata/data-model.md) § Valideringsregler.
 
 ## Livscyklus
 

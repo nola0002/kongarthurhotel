@@ -12,7 +12,7 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
 - **Rationale**: Express 5 sender fejl fra `async` route-handlere videre til fejl-middleware
   af sig selv. Vi kan derfor have én fælles fejlhåndtering uden `try/catch` i hver route og
   uden `express-async-errors`. Node 24 har `node:test`, `fetch`, `crypto.scrypt` og
-  `--env-file` indbygget.
+  `node --watch` indbygget.
 - **Alternativer**: Express 4 kræver async-wrapper. Fastify/NestJS er mere at forklare, og
   ingen i gruppen har valgt dem.
 
@@ -49,6 +49,10 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
 - **Penge**: `DECIMAL(10,2)` i databasen. mysql2 returnerer DECIMAL som streng, og
   repositoriet omregner til **øre (heltal)**. Services regner i øre, og route-laget sender
   kroner som tal i JSON (`1800` eller `1800.5`).
+- **Tekst og søgning**: Skemaet angiver ikke tegnsæt, så MySQL 8.4's standard
+  `utf8mb4_0900_ai_ci` gælder. Danske tegn gemmes som UTF-8, og `LIKE` på gæstenavn skelner
+  hverken mellem store og små bogstaver eller accenter (FR-002). Seed-filen starter med
+  `SET NAMES utf8mb4`, fordi mysql-klienten i containeren ellers sender latin1.
 - **Datoer**: `DATE` med poolens `dateStrings: true`, så datoer forbliver `'YYYY-MM-DD'`-strenge
   og aldrig bliver forskudt af tidszoner.
 - **Tidspunkter**: `DATETIME` returneres som lokal tid `'YYYY-MM-DDTHH:mm:ss'` uden offset
@@ -89,7 +93,7 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
   `d ∈ [check_in, check_out)`, slår sæsonen op og summerer i øre. Mangler der en periode eller
   pris, afvises bookingen med `PRICE_NOT_CONFIGURED`. Totalen gemmes på bookingen
   (`total_price`).
-- **Rationale**: Én ren funktion (`calculateStayPrice(nights, periods, prices)`) uden I/O kan
+- **Rationale**: Én ren funktion (`calculateStayPrice({ checkIn, checkOut, periods, prices })`) uden I/O kan
   testes fuldt med `node:test`. Sæsonnavne gentages ikke pr. år (3NF), og BI (feature 002) kan
   gruppere på sæsonnavn på tværs af år.
 - **Prisvisning før gem**: `GET /api/bookings/quote` kalder samme servicefunktion, så
@@ -136,7 +140,8 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
 
 ## R8. Frontend og same-origin
 
-- **Beslutning**: Frontend-containeren kører Vite's dev-server (`vite --host`) med proxy
+- **Beslutning**: Frontend-containeren kører Vite's dev-server (`npx vite`, `host: true` i
+  `vite.config.js`) med proxy
   `/api → http://backend:3000` og `/docs → http://swagger:8080`. Browseren ser derfor kun én
   origin (`localhost:5173`). Det betyder ingen CORS-opsætning og at cookies virker uden
   `sameSite: none`.
@@ -148,13 +153,19 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
 ## R9. Swagger UI (KB-A3, KB-D7)
 
 - **Beslutning**: Det officielle image `swaggerapi/swagger-ui` i egen container med
-  `backend/openapi.yaml` mountet ind (`SWAGGER_JSON=/openapi.yaml`) og `BASE_URL=/docs`.
-  Den åbnes via Vite-proxyen på `http://localhost:5173/docs`. Port 8080 eksponeres ikke.
+  `backend/openapi.yaml` mountet ind som `/spec/openapi.yaml` (`SWAGGER_JSON=/spec/openapi.yaml`)
+  og `BASE_URL=/docs`. Filen skal ligge i en undermappe: i `/` leder imagets nginx efter
+  `//openapi.yaml` og giver 404. Den åbnes via Vite-proxyen på `http://localhost:5173/docs`.
+  Port 8080 eksponeres ikke.
 - **Rationale**: Ingen kode, kun konfiguration. Samme fil, som validatoren bruger (SSOT).
   Kontraktens `servers: - url: /api` er relativ, så "Try it out" rammer `localhost:5173/api`
   på samme origin og sender session-cookien med.
 
 ## R10. Testdata ("gerne ret meget")
+
+> **Erstattet af 004**: Indholdet (værelser, typer, sæsoner, priser, lande, bookinger og
+> barsalg) følger nu opgavens datasæt. Se [004 research](../004-opgavedata/research.md)
+> R4–R12. Generatoren er stadig deterministisk og skriver stadig `db/02_seed.sql`.
 
 - **Beslutning**: Et deterministisk Node-script `backend/scripts/generate-seed.js` genererer
   `db/02_seed.sql`. Det er fuldt deterministisk: fast seed i en simpel PRNG og faste datoer
@@ -163,9 +174,13 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
   prisimplementering. Indhold:
   - 60 værelser fordelt på 4 typer.
   - Sæsonperioder for 2025–2027.
-  - Ca. 40 lande med realistisk vægtning (DK, DE, SE, NO, UK, US …). Danske landenavne kommer
-    fra `Intl.DisplayNames('da', { type: 'region' })`.
-  - Bookinger med 60–80 % belægning fra `SEED_START` til `SEED_END`.
+  - 40 lande med realistisk vægtning (DK, DE, SE, NO, GB, US …). Danske landenavne kommer
+    fra `Intl.DisplayNames('da', { type: 'region' })`. Gæstenavne har danske bogstaver (fx
+    Søren Jørgensen), så søgning med æ, ø og å bliver afprøvet.
+  - Bookinger fra `SEED_START` til `SEED_END`. Belægningen varierer med sæsonen (ca. 62 % i
+    lav-, 67 % i mellem- og 79 % i højsæson, ca. 68 % i alt), så belægning pr. sæson i BI giver
+    mening. `created_at` er 14 dage før ankomst, men aldrig efter `SEED_SALES_END`, så ingen
+    booking er oprettet i fremtiden.
   - Barsalg (cocktails og kaffe) dagligt fra `SEED_START` til `SEED_SALES_END = '2026-11-05'`
     (dagen før fremlæggelsen). Der er intet salg i fremtiden, så "årets salg" i BI er realistisk.
     Ca. en tredjedel er lagt på et værelse.
@@ -176,7 +191,7 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
   DB-containeren. Scriptet køres med
   `docker compose run --rm backend node scripts/generate-seed.js` (`./db` er monteret) eller
   `node backend/scripts/generate-seed.js` på host.
-- **Omfang**: Ca. 12.000 bookinger og ca. 20.000 barsalg, så sæson-, lande- og
+- **Omfang**: Ca. 10.400 bookinger og ca. 20.000 barsalg, så sæson-, lande- og
   drinkfordelinger i BI giver mening.
 
 ## R11. Bookinglistens størrelse
@@ -192,7 +207,7 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
   "Viser 100 af 1.234 – søg eller filtrér for at indsnævre". Der er ingen paginering
   (designprincip 9). Søgning og datofilter er vejen til en bestemt booking (SC-002).
   Frontend summerer og tæller ikke selv.
-- **Rationale**: 12.000 rækker i én tabel er langsomt og uoverskueligt. Paginering er mere UI
+- **Rationale**: 10.000 rækker i én tabel er langsomt og uoverskueligt. Paginering er mere UI
   end opgaven kræver.
 
 ## R12. Afledt opholdsstatus
@@ -242,6 +257,7 @@ standardbibliotek før afhængigheder, og genbrug før nyt. Pakkeversioner er tj
 | `vite`, `@vitejs/plugin-react`, `tailwindcss`, `@tailwindcss/vite` | Rammekrav (React + Tailwind) |
 | `@phosphor-icons/react`, `@fontsource-variable/instrument-sans` | Designsystemet i `docs/design/` |
 
-Fravalgt: ORM, zod, bcrypt, express-session, CORS-pakke, dotenv (`node --env-file`),
+Fravalgt: ORM, zod, bcrypt, express-session, CORS-pakke, dotenv (Compose sætter
+miljøvariablerne fra `.env` via `env_file`),
 nodemon (`node --watch`), Jest/supertest, clsx, dato- og formularbiblioteker og
 `@base-ui/react` (native `<dialog>` og `<select>` er nok, og toast er en lille komponent).

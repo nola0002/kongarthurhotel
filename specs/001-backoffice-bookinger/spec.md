@@ -236,6 +236,10 @@ bookinglisten og overholder samme regler som manuelle bookinger.
   dato).
 - **FR-003** (FR1): Receptionisten MUST kunne oprette en booking med gæstenavn, gæstens land,
   værelsestype, ankomstdato, afrejsedato og antal gæster.
+
+  > **Ændret af 004** (FR-001–FR-003): Gæstenavnet er to felter, fornavn og efternavn, som i
+  > opgavens data. Søgningen matcher fornavn, efternavn og "fornavn efternavn". Se
+  > [004 spec](../004-opgavedata/spec.md) FR-006 og FR-007.
 - **FR-004** (FR1): Receptionisten MUST kunne redigere alle felter i en eksisterende booking.
 - **FR-005** (FR1, FR3): Receptionisten MUST kunne slette en booking, og systemet MUST kræve en
   eksplicit bekræftelse, før sletningen udføres.
@@ -259,9 +263,17 @@ bookinglisten og overholder samme regler som manuelle bookinger.
 - **FR-012** (KB-T7): Værelsestyper (inkl. kapacitet), værelser, sæsoner (med datoperioder),
   priser pr. værelsestype pr. sæson samt drinks og drinkpriser MUST ligge som data og ikke
   være hardcodet.
+
+  > **Ændret af 004**: Indholdet er nu opgavens data (214 værelser, 8 værelsestyper, priser,
+  > sæsoner inkl. jul, 20 lande og 30 drinks). Se [004 spec](../004-opgavedata/spec.md)
+  > FR-001–FR-005 og FR-011.
 - **FR-013** (KB-T10): Systemet MUST kunne modtage bookinger fra hotellets eget bookingsystem via
   en sikret integration. Disse bookinger MUST valideres efter samme regler som manuelle
   bookinger og markeres med kilde.
+
+  > **Ændret af 004**: Bookingsystemet må også ændre (`PUT`) og slette (`DELETE`) bookinger
+  > med sin nøgle, men ikke læse dem. En ændring beholder kilden. Se
+  > [004 spec](../004-opgavedata/spec.md) FR-013.
 - **FR-014**: Valideringsfejl MUST vises for receptionisten som en forståelig dansk besked, der
   angiver, hvilket felt eller hvilken regel der fejlede.
 - **FR-015**: Adgang til back office MUST kræve login med én fælles receptionistkonto
@@ -305,10 +317,15 @@ bookinglisten og overholder samme regler som manuelle bookinger.
 - Der er intet datasæt fra opgaven. Gruppen genererer et stort, realistisk testdatasæt som
   startdata (bookinger, gæster fra mange lande og barsalg over mindst ét helt år), så
   bookinglisten og BI-dashboardet har meningsfuldt indhold fra start.
+
+  > **Ændret af 004**: Gælder ikke længere. Opgaven har et datasæt (ITAKEA/hoteldata), og
+  > startdata bygger nu på det. Se [004 spec](../004-opgavedata/spec.md) og
+  > [004 research](../004-opgavedata/research.md) R1–R12.
 - Sæsoner defineres som datoperioder i data. Den konkrete inddeling (fx lav-, mellem- og
   højsæson) hentes fra hotellets datagrundlag.
 - Én booking dækker ét værelse. Flere værelser kræver flere bookinger.
-- Den fælles receptionistkonto oprettes via startdata. Brugeradministration, roller og
+- Den fælles receptionistkonto oprettes automatisk ved første start ud fra konfigurationen
+  (ikke i startdata, så ingen adgangskode ligger i repoet). Brugeradministration, roller og
   nulstilling af adgangskode er uden for scope.
 - Tildeling af værelse vælger det første ledige værelse af typen (laveste værelsesnummer).
   Receptionisten kan ikke vælge værelsesnummer manuelt.

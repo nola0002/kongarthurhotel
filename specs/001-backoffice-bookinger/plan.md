@@ -38,8 +38,13 @@ Detaljerede beslutninger står i [research.md](research.md).
 
 **Storage**: MySQL 8.4 LTS i Docker med named volume `db-data`. Skema og seed er SQL-filer i
 `db/`, som køres via `docker-entrypoint-initdb.d`. `db/00_test-db.sh` opretter testdatabasen
-`kongarthur_test`. Receptionistkontoen er ikke i seed. Den oprettes af `ensureSeedUser()` ved
-start af backend ud fra `SEED_USERNAME`/`SEED_PASSWORD` i `.env` (B8).
+`kongarthur_test`. Scriptet kalder `mysql` direkte som root i stedet for `docker_process_sql`,
+fordi Docker Desktop (macOS/Windows) viser monterede filer som eksekverbare, så entrypointet
+kører scriptet i stedet for at source det. Sådan virker det begge veje, og
+`db/.gitattributes` tvinger LF, så Windows-checkouts ikke giver CRLF. Tegnsættet er MySQL
+8.4's standard `utf8mb4_0900_ai_ci`, så søgning ignorerer store/små bogstaver og accenter
+(FR-002). Receptionistkontoen er ikke i seed. Den oprettes af `ensureSeedUser()` ved start af
+backend ud fra `SEED_USERNAME`/`SEED_PASSWORD` i `.env` (B8).
 
 **Testing**: `node:test` + `node:assert/strict` (`npm test` i `backend/`). Kun backend.
 Services får repositories, `withTransaction` og `today` injiceret, så unit-tests kører uden
@@ -52,7 +57,7 @@ vises i en desktop-browser i receptionen.
 **Project Type**: Web-applikation (backend + frontend) plus database og API-dokumentation.
 
 **Performance Goals**: Svar til mennesker føles øjeblikkelige: liste og søgning under 1 sekund
-på ca. 12.000 bookinger. En booking fra bookingsystemet er synlig i bookinglisten, næste gang
+på ca. 10.400 bookinger. En booking fra bookingsystemet er synlig i bookinglisten, næste gang
 listen indlæses (SC-006).
 
 **Constraints**:
@@ -64,7 +69,7 @@ listen indlæses (SC-006).
 
 **Scale/Scope**:
 - 1 brugerkonto og 60 værelser.
-- Ca. 12.000 bookinger og ca. 20.000 barsalg i testdata.
+- Ca. 10.400 bookinger og ca. 20.000 barsalg i testdata (research R10).
 - 4 skærme (login, liste, detalje, barsalg) plus én skuffe-formular.
 - 10 API-stier.
 
@@ -104,31 +109,35 @@ specs/001-backoffice-bookinger/
 ├── quickstart.md        # Phase 1: start og valideringsscenarier
 ├── analysis.md          # /speckit-analyze: fund og bindende beslutninger (B1–B18)
 ├── contracts/
-│   └── openapi.yaml     # Phase 1: API-kontrakt (flyttes til backend/openapi.yaml, se note)
+│   └── README.md        # peger på backend/openapi.yaml (se note)
 ├── checklists/
 │   └── requirements.md
 ├── tasks.md             # Phase 2 (/speckit-tasks)
 └── converge.md          # /speckit-converge: implementeret vs. mangler (KB-D4, T070)
 ```
 
-**Note om kontrakten**: Ved implementering flyttes `contracts/openapi.yaml` til
-`backend/openapi.yaml`, som derefter er single source of truth. Den bruges af validatoren og
+**Note om kontrakten**: Ved implementering (T001) er `contracts/openapi.yaml` flyttet til
+`backend/openapi.yaml`, som nu er single source of truth. Den bruges af validatoren og
 af Swagger UI. `contracts/` beholder kun en `README.md`, der peger derhen, så der aldrig
 findes to versioner.
 
 ### Source Code (repository root)
 
 ```text
+README.md                   # start, arkitektur, fejlfinding (KB-D6)
+CONTRIBUTE.md               # arbejdsgang og commits (KB-D6)
 docker-compose.yml          # db, backend, frontend, swagger
 .env.example                # udviklings-placeholders: DB-login, SESSION_SECRET, BOOKING_SYSTEM_API_KEY, SEED_*
-.gitignore                  # node_modules/, .env, .DS_Store
+.gitignore                  # node_modules/, dist/, .env, .DS_Store, *.log
 .prettierrc.json            # fælles formatering (npx prettier@3, ingen afhængighed)
 db/
+├── .gitattributes          # *.sh med LF, så bash kan køre scriptet på Windows
 ├── 00_test-db.sh           # opretter kongarthur_test og giver MYSQL_USER adgang
 ├── 01_schema.sql           # SSOT for skemaet (data-model.md)
 └── 02_seed.sql             # GENERERET af backend/scripts/generate-seed.js (uden users)
 backend/
 ├── Dockerfile              # COPY package*.json → npm ci → COPY . .
+├── .dockerignore           # node_modules, .env, *.log
 ├── package.json            # "type": "module", scripts: start, dev (node --watch), test (node --test)
 ├── package-lock.json
 ├── openapi.yaml            # SSOT for API'et
@@ -168,7 +177,8 @@ backend/
     ├── testDb.js            # setupTestDb(): drop/create kongarthur_test + skema + fixture
     └── api.test.js          # mod kongarthur_test
 frontend/
-├── Dockerfile
+├── Dockerfile              # som backend, CMD npx vite
+├── .dockerignore
 ├── package.json
 ├── package-lock.json
 ├── vite.config.js          # react + tailwind, proxy /api → backend:3000 og /docs → swagger:8080
@@ -177,8 +187,8 @@ frontend/
     ├── main.jsx            # router: /login uden for layout-routen, login-loader på layout
     ├── index.css           # tokens (docs/design/tokens.md)
     ├── ui.jsx              # primitiver (docs/design/komponenter.md)
-    ├── format.js
-    ├── api.js
+    ├── format.js           # al tal- og datoformatering (Intl)
+    ├── api.js              # eneste vej til backend
     ├── Shell.jsx           # sidebar, toast (aria-live)
     ├── BookingForm.jsx     # <dialog>-skuffe: opret + rediger
     └── pages/
@@ -201,8 +211,8 @@ SQL-filer og én `docker-compose.yml`.
 |---|---|---|---|
 | `db` | `mysql:8.4` | – (kun internt) | `env_file: .env`, `TZ=Europe/Copenhagen`. Volumes: `db-data:/var/lib/mysql` og `./db:/docker-entrypoint-initdb.d:ro`. Healthcheck: `mysqladmin ping -h 127.0.0.1 --protocol=TCP -u$$MYSQL_USER -p$$MYSQL_PASSWORD` med `interval: 3s`, `retries: 40`, `start_period: 60s` |
 | `backend` | `./backend` (`node:24-alpine`) | 3000 | `depends_on: db: condition: service_healthy`. `env_file: .env`, `TZ=Europe/Copenhagen`. Volumes: `./backend:/app`, anonymt `/app/node_modules` og `./db:/db`. `node --watch` |
-| `frontend` | `./frontend` (`node:24-alpine`) | 5173 | `vite --host`. Proxy `/api` → `http://backend:3000` og `/docs` → `http://swagger:8080` |
-| `swagger` | `swaggerapi/swagger-ui` | – (via `http://localhost:5173/docs`) | `./backend/openapi.yaml:/openapi.yaml:ro`, `SWAGGER_JSON=/openapi.yaml`, `BASE_URL=/docs`. Samme origin som frontend, så "Try it out" kalder `/api` med session-cookien |
+| `frontend` | `./frontend` (`node:24-alpine`) | 5173 | `npx vite` med `host: true` i `vite.config.js`. Volumes: `./frontend:/app` og anonymt `/app/node_modules`. Proxy `/api` → `http://backend:3000` og `/docs` → `http://swagger:8080` |
+| `swagger` | `swaggerapi/swagger-ui` | – (via `http://localhost:5173/docs`) | `./backend/openapi.yaml:/spec/openapi.yaml:ro`, `SWAGGER_JSON=/spec/openapi.yaml` (i en undermappe: ligger filen i `/`, leder imagets nginx efter `//openapi.yaml` og giver 404), `BASE_URL=/docs`. Samme origin som frontend, så "Try it out" kalder `/api` med session-cookien |
 
 - Dockerfiles: `FROM node:24-alpine`, `WORKDIR /app`, `COPY package*.json ./`, `RUN npm ci`,
   `COPY . .`. Lockfiles genereres én gang med
