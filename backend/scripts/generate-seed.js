@@ -9,6 +9,8 @@ import { toKr, toOre } from '../src/money.js'
 const SEED_START = '2025-01-01'
 const SEED_END = '2027-02-28'
 const SEED_SALES_END = '2026-11-05' // the day before the presentation: no sales and no booking created in the future
+// Scores only up to the first day the seed is used, so no guest has a score before the departure day (003 FR-011, T047)
+const SEED_SCORES_END = '2026-10-30'
 
 // mulberry32: tiny seeded PRNG; Math.random cannot be seeded
 function mulberry32(seed) {
@@ -298,7 +300,7 @@ const SCORE_SHARES = [
   [1, 0.03],
 ]
 function satisfactionScore(checkOut) {
-  if (checkOut > SEED_SALES_END || scoreRandom() >= 0.8) return null
+  if (checkOut > SEED_SCORES_END || scoreRandom() >= 0.8) return null
   let r = scoreRandom()
   // The shares sum to 1 up to float rounding, so a draw past the last share counts as the last score
   return SCORE_SHARES.find(([, share]) => (r -= share) < 0)?.[0] ?? 1
@@ -425,10 +427,10 @@ for (const stays of staysByRoom.values()) {
   stays.slice(1).forEach((stay, i) => assert.ok(stays[i].checkOut <= stay.checkIn, `booking ${stay.id} overlaps`))
 }
 
-const departed = bookings.filter((b) => b.checkOut <= SEED_SALES_END)
+const departed = bookings.filter((b) => b.checkOut <= SEED_SCORES_END)
 const scores = departed.map((b) => b.satisfactionScore).filter((score) => score !== null)
 assert.ok(
-  bookings.every((b) => b.satisfactionScore === null || b.checkOut <= SEED_SALES_END),
+  bookings.every((b) => b.satisfactionScore === null || b.checkOut <= SEED_SCORES_END),
   'score before departure',
 )
 assert.ok(Math.abs(scores.length / departed.length - 0.8) < 0.02, 'satisfaction response rate')

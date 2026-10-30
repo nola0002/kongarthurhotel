@@ -137,10 +137,13 @@ frontend fra 001, nøgletallene fra 002 og opgavens data fra 004. Kontrakten st�
 ## R9. Genererede historiske scores
 
 - **Beslutning**: `generate-seed.js` (efter 004) giver bookinger, hvis afrejse ligger på eller
-  før seedens skæringsdato (samme dato som barsalgets "indtil i dag" i 004), en score med den
+  før en egen skæringsdato for scorer (`SEED_SCORES_END = 2026-10-30`, den første dag seeden
+  bruges), en score med den
   eksisterende deterministiske tilfældighedsgenerator: 80 % svarer, fordelt med 5: 45 %, 4: 35 %,
   3: 12 %, 2: 5 % og 1: 3 % (gennemsnit ca. 4,1). Kommentaren i scriptet og README siger, at
-  scorerne er genererede, fordi opgavens datasæt ikke har tilfredshedsdata.
+  scorerne er genererede, fordi opgavens datasæt ikke har tilfredshedsdata. Skæringsdatoen er
+  adskilt fra barsalgets (`SEED_SALES_END = 2026-11-05`). Ellers ville bookinger, der rejser
+  mellem 31/10 og 5/11, have en score før afrejsedagen, hvilket bryder FR-011 (T047).
 - **Rationale**: Dashboardet og overblikket skal vise realistiske data fra start, og
   oprindelsen skal være tydelig (D8, ejerskab).
 - **Alternativer**: Ingen historiske scores. Fravalgt, fordi nøgletallet så ville være 0 ved

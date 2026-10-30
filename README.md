@@ -200,7 +200,7 @@ så alle får de samme data, og det stopper med en fejl, hvis data afviger fra o
   række i 2025 (kilde "Bookingsystem"). Resten er genereret med samme navne og lande.
   Belægning 70,5 % i 2025 og 70,6 % i 2026 (ca. 65 % i lav-, 68 % i mellem- og 79 % i
   højsæson).
-- Kundetilfredshed (1–5) på ca. 80 % af bookingerne med afrejse til og med 2026-11-05
+- Kundetilfredshed (1–5) på ca. 80 % af bookingerne med afrejse til og med 2026-10-30
   (gennemsnit ca. 4,15). Scorerne er **genererede**, fordi opgavens datasæt ingen
   tilfredshedsdata har (spec 003 FR-015).
 - 132.698 barsalg til og med 2026-11-05. Salget i 2025 er præcis drinkfilens "Units Sold"

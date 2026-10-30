@@ -35,11 +35,11 @@ T045 og T042. Tidsmålene SC-001, SC-002, SC-003 (visning) og SC-007 måles før
 | FR-008 Bladre, I dag, startdato og antal dage i adressen | ✅ | `DateNav` + `?fra=&dage=` i `RoomPlan.jsx` |
 | FR-009 Klik åbner booking, status med form og tekst | ✅ | `<Link>` til `/bookinger/:id`, `StatusMarker`, `aria-label`/`title` med navn, periode og status, forklaring over planen |
 | FR-010 (MAY) Klik på ledig celle åbner "Ny booking" | ⏳ valgfri | Ikke bygget (T043). Se afvigelse 1 |
-| FR-011 Score 1–5, først på afrejsedagen, kan erstattes | ✅ API · ❌ seed | `registerSatisfaction` i `backend/src/services/bookingService.js`, `PUT /bookings/:id/satisfaction` i `backend/src/routes/bookings.js`, `SatisfactionInput` i `openapi.yaml`, `CHECK (satisfaction_score BETWEEN 1 AND 5)` i `db/01_schema.sql`. 3 tests i `bookingService.test.js`, 3 i `api.test.js`. Seed-data bryder reglen, se Mangler (T047) |
+| FR-011 Score 1–5, først på afrejsedagen, kan erstattes | ✅ | `registerSatisfaction` i `backend/src/services/bookingService.js`, `PUT /bookings/:id/satisfaction` i `backend/src/routes/bookings.js`, `SatisfactionInput` i `openapi.yaml`, `CHECK (satisfaction_score BETWEEN 1 AND 5)` i `db/01_schema.sql`. 3 tests i `bookingService.test.js`, 3 i `api.test.js`. Seed-data overholder reglen efter T047 |
 | FR-012 Handling og score i Oversigt og på detaljesiden | ✅ | Kolonnen Tilfredshed i `Overview.jsx`, `Field` og knap i `frontend/src/pages/BookingDetail.jsx`, `frontend/src/SatisfactionDialog.jsx`. Se afvigelse 3 |
 | FR-013 Scoren på bookingen, bevares ved redigering, slettes med den | ✅ | `bookings.satisfaction_score`, `updateSatisfaction` i `backend/src/repositories/bookingRepository.js`. `updateBooking` sætter ikke kolonnen. Se afvigelse 4 |
 | FR-014 Kundetilfredshed og besvarelser pr. år, score i bookingrækker | ✅ API · ⏳ Tableau | `kpis()` og `toBookingRow` i `backend/src/services/analyticsService.js`, `listBookings` i `backend/src/repositories/analyticsRepository.js`, `Kpi`-enum og `AnalyticsBooking.satisfactionScore` i `openapi.yaml`. 3 FT12-tests. Arket mangler (T042) |
-| FR-015 Genererede historiske scores, dokumenteret | ❌ delvist | `satisfactionScore` i `backend/scripts/generate-seed.js` (80 %, gennemsnit 4,15) og `README.md` § testdata. Men 134 scores ligger på bookinger, der ikke er rejst endnu. Se Mangler (T047) |
+| FR-015 Genererede historiske scores, dokumenteret | ✅ | `satisfactionScore` i `backend/scripts/generate-seed.js` (80 %, gennemsnit 4,15) og `README.md` § testdata. Efter T047 har kun bookinger med afrejse til og med `SEED_SCORES_END = 2026-10-30` en score (0 scorer før afrejse, verificeret med SQL) |
 | FR-016 "Helene Christine · lobbybaren" | ✅ | `PageHeader` i `frontend/src/pages/BarSales.jsx` |
 | FR-017 Alle tal og status fra logiklaget | ✅ | `receptionService.js` regner antal, ledighed og status. React viser kun API'ets tal. `arrivals.length` er en optælling af API'ets liste (tilladt efter constitution III) |
 | FR-018 Kun session, ikke bookingsystemets nøgle | ✅ | `requireSession` i `routes/reception.js` og på `PUT /bookings/:id/satisfaction`. 3 FR-018-tests i `api.test.js` (uden cookie og med `X-API-Key`) |
@@ -83,7 +83,7 @@ T045 og T042. Tidsmålene SC-001, SC-002, SC-003 (visning) og SC-007 måles før
 
 Converge fandt én ny mangel. Den er tilføjet som **Phase 9: Convergence** i `tasks.md`:
 
-- **T047** (ny, FR-015, FR-011, contradicts): Seedens scores går til og med `SEED_SALES_END =
+- ~~**T047**~~ ✅ Løst 2026-10-30 med `SEED_SCORES_END`, nyt seed og `docker compose down -v`; 98/98 tests grønne. Oprindelig beskrivelse (FR-015, FR-011, contradicts): Seedens scores går til og med `SEED_SALES_END =
   2026-11-05` (fremlæggelsens aften, research R9). I dag, 2026-10-30, har 134 bookinger med
   afrejse fra 2026-10-31 til 2026-11-05 derfor en score, selv om gæsten ikke er rejst. Oversigt
   for fx 2026-10-31 viser 23 afrejser med "N af 5" og status "I huset", detaljesiden viser
