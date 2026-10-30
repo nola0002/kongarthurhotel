@@ -68,8 +68,11 @@ tags:
   - name: Analytics
     description: |
       Read-only data for the Tableau dashboard (feature 002). Every endpoint returns a flat array
-      covering all years, with no query parameters. `year` and `month` are integers; money is DKK;
-      `percent` values are fractions 0–1.
+      covering all years, with no query parameters. The tables form a star schema in one Tableau data
+      source: the dimensions `calendar`, `room-types` and `countries` hold the descriptive fields
+      (year, month, season, country name), and the facts `room-nights`, `occupancy`, `bookings`,
+      `bar-sales` and `kpis` hold only keys to them and their own measures (FR-012, FR-017).
+      `year` and `month` are integers; money is DKK; `percent` values are fractions 0–1.
 
 security:
   - session: []
@@ -454,7 +457,7 @@ paths:
       summary: The analytics tables Tableau can read
       description: |
         Tableau's REST API connector checks this base URL when it connects, so it answers 200 with
-        the paths of the tables below.
+        the paths of the eight tables below: the five facts and the three dimensions.
       security: [{ session: [] }, { biKey: [] }]
       responses:
         '200':
@@ -467,8 +470,17 @@ paths:
                   type: object
                   required: [table, path]
                   properties:
-                    table: { type: string, example: kpis }
-                    path: { type: string, example: /api/analytics/kpis }
+                    table: { type: string }
+                    path: { type: string }
+              example:
+                - { table: room-nights, path: /api/analytics/room-nights }
+                - { table: occupancy, path: /api/analytics/occupancy }
+                - { table: bookings, path: /api/analytics/bookings }
+                - { table: bar-sales, path: /api/analytics/bar-sales }
+                - { table: kpis, path: /api/analytics/kpis }
+                - { table: calendar, path: /api/analytics/calendar }
+                - { table: room-types, path: /api/analytics/room-types }
+                - { table: countries, path: /api/analytics/countries }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /analytics/room-nights:
@@ -515,7 +527,9 @@ paths:
     get:
       tags: [Analytics]
       summary: One row per booking, for bookings and guests per country and stay length (FT6, FT11)
-      description: '`year`/`month` are those of check-in. `nights` is derived from the dates. `revenue` is `totalPrice`.'
+      description: |
+        `checkIn` relates the booking to the calendar, so it counts in the year and month of check-in.
+        `nights` is derived from the dates. `revenue` is `totalPrice`.
       security: [{ session: [] }, { biKey: [] }]
       responses:
         '200':
@@ -548,7 +562,8 @@ paths:
       tags: [Analytics]
       summary: Backend-computed KPIs per calendar year (A4, FR-011, FT5, FT6, FT10, FT11, FT12, FT13, FT15)
       description: |
-        One set of rows per year that has room-nights, bar sales or check-outs. Empty denominators give 0.
+        One set of rows for every year in `/analytics/calendar`, so every year that can be selected has
+        KPIs (FR-018). A year without data gives 0, as do empty denominators.
         - `occupancyRate` (percent): sold ÷ available room-nights in the year
         - `roomRevenue` (DKK): room-night revenue for nights in the year (FR-015)
         - `avgPricePerNight` (DKK): roomRevenue ÷ sold room-nights in the year, rounded to øre
@@ -568,6 +583,55 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Kpi' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /analytics/calendar:
+    get:
+      tags: [Analytics]
+      summary: Calendar dimension, one row per date in whole calendar years (FR-012, FR-017)
+      description: |
+        Every date from 1 January of the earliest to 31 December of the latest year with a season
+        period, a check-in, a check-out or a bar sale, so no fact row falls outside the calendar.
+        `season` is that of the season period covering the date, and `null` outside every period.
+      security: [{ session: [] }, { biKey: [] }]
+      responses:
+        '200':
+          description: Dates ordered by date
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CalendarDay' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /analytics/room-types:
+    get:
+      tags: [Analytics]
+      summary: Room type dimension, one row per room type, also those without rooms or sales (FR-012, FR-017)
+      security: [{ session: [] }, { biKey: [] }]
+      responses:
+        '200':
+          description: Room types ordered by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AnalyticsRoomType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /analytics/countries:
+    get:
+      tags: [Analytics]
+      summary: Country dimension, one row per country, also those without bookings (FR-012, FR-017)
+      security: [{ session: [] }, { biKey: [] }]
+      responses:
+        '200':
+          description: Countries ordered by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AnalyticsCountry' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
 components:
@@ -907,48 +971,32 @@ components:
 
     RoomNight:
       type: object
-      required: [bookingId, date, year, month, season, roomType, countryCode, country, revenue]
+      required: [bookingId, date, roomType, countryCode, revenue]
       properties:
         bookingId: { type: integer }
-        date: { type: string, format: date, description: 'The night, i.e. the date the guest sleeps there' }
-        year: { type: integer }
-        month: { type: integer, minimum: 1, maximum: 12 }
-        season: { type: string, nullable: true, description: 'null only if no season period covers the night' }
-        roomType: { type: string }
-        countryCode: { type: string }
-        country: { type: string }
+        date:
+          {
+            type: string,
+            format: date,
+            description: 'The night, i.e. the date the guest sleeps there; key to CalendarDay.date',
+          }
+        roomType: { type: string, description: Key to AnalyticsRoomType.roomType }
+        countryCode: { type: string, description: Key to AnalyticsCountry.countryCode }
         revenue: { type: number, description: "The night's share of the booking's totalPrice (FR-015)" }
-      example:
-        {
-          bookingId: 10384,
-          date: '2027-01-10',
-          year: 2027,
-          month: 1,
-          season: Lavsæson,
-          roomType: Dobbeltværelse,
-          countryCode: DK,
-          country: Danmark,
-          revenue: 1000,
-        }
+      example: { bookingId: 10384, date: '2027-01-10', roomType: Dobbeltværelse, countryCode: DK, revenue: 1000 }
 
     OccupancyDay:
       type: object
-      required: [date, year, month, season, roomType, availableRoomNights, soldRoomNights, occupancyRate]
+      required: [date, roomType, availableRoomNights, soldRoomNights, occupancyRate]
       properties:
-        date: { type: string, format: date }
-        year: { type: integer }
-        month: { type: integer, minimum: 1, maximum: 12 }
-        season: { type: string }
-        roomType: { type: string }
+        date: { type: string, format: date, description: Key to CalendarDay.date }
+        roomType: { type: string, description: Key to AnalyticsRoomType.roomType }
         availableRoomNights: { type: integer }
         soldRoomNights: { type: integer }
         occupancyRate: { type: number, description: 'Fraction 0–1' }
       example:
         {
           date: '2027-01-10',
-          year: 2027,
-          month: 1,
-          season: Lavsæson,
           roomType: Dobbeltværelse,
           availableRoomNights: 24,
           soldRoomNights: 12,
@@ -957,30 +1005,13 @@ components:
 
     AnalyticsBooking:
       type: object
-      required:
-        [
-          bookingId,
-          checkIn,
-          checkOut,
-          year,
-          month,
-          roomType,
-          countryCode,
-          country,
-          guestCount,
-          nights,
-          revenue,
-          satisfactionScore,
-        ]
+      required: [bookingId, checkIn, checkOut, roomType, countryCode, guestCount, nights, revenue, satisfactionScore]
       properties:
         bookingId: { type: integer }
-        checkIn: { type: string, format: date }
+        checkIn: { type: string, format: date, description: Key to CalendarDay.date }
         checkOut: { type: string, format: date }
-        year: { type: integer, description: Year of check-in }
-        month: { type: integer, minimum: 1, maximum: 12, description: Month of check-in }
-        roomType: { type: string }
-        countryCode: { type: string }
-        country: { type: string }
+        roomType: { type: string, description: Key to AnalyticsRoomType.roomType }
+        countryCode: { type: string, description: Key to AnalyticsCountry.countryCode }
         guestCount: { type: integer }
         nights: { type: integer }
         revenue: { type: number, description: Price frozen at booking/edit time (FR-009) }
@@ -991,11 +1022,8 @@ components:
           bookingId: 10384,
           checkIn: '2027-01-10',
           checkOut: '2027-01-12',
-          year: 2027,
-          month: 1,
           roomType: Dobbeltværelse,
           countryCode: DK,
-          country: Danmark,
           guestCount: 2,
           nights: 2,
           revenue: 2000,
@@ -1004,33 +1032,27 @@ components:
 
     AnalyticsBarSale:
       type: object
-      required: [saleId, date, year, month, drink, category, quantity, revenue]
+      required: [saleId, date, drink, category, quantity, revenue]
       properties:
         saleId: { type: integer }
-        date: { type: string, format: date, description: 'Local date (Europe/Copenhagen) of the sale' }
-        year: { type: integer }
-        month: { type: integer, minimum: 1, maximum: 12 }
+        date:
+          {
+            type: string,
+            format: date,
+            description: 'Local date (Europe/Copenhagen) of the sale; key to CalendarDay.date',
+          }
         drink: { type: string }
         category: { type: string }
         quantity: { type: integer }
         revenue: { type: number, description: 'quantity × unit price at the time of sale' }
       example:
-        {
-          saleId: 20113,
-          date: '2026-10-29',
-          year: 2026,
-          month: 10,
-          drink: Espresso Martini,
-          category: Cocktail,
-          quantity: 2,
-          revenue: 210,
-        }
+        { saleId: 20113, date: '2026-10-29', drink: Espresso Martini, category: Cocktail, quantity: 2, revenue: 210 }
 
     Kpi:
       type: object
       required: [year, kpi, label, dimension, value, unit, generatedAt]
       properties:
-        year: { type: integer }
+        year: { type: integer, description: 'Key to CalendarDay.year (many-to-many)' }
         kpi:
           type: string
           enum:
@@ -1066,6 +1088,33 @@ components:
           unit: percent,
           generatedAt: '2026-10-30T09:15:00.000Z',
         }
+
+    CalendarDay:
+      type: object
+      required: [date, year, month, season]
+      properties:
+        date: { type: string, format: date }
+        year: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        season: { type: string, nullable: true, description: 'null when no season period covers the date' }
+      example: { date: '2027-01-10', year: 2027, month: 1, season: Lavsæson }
+
+    AnalyticsRoomType:
+      type: object
+      required: [roomType, capacity, rooms]
+      properties:
+        roomType: { type: string }
+        capacity: { type: integer }
+        rooms: { type: integer, description: 'Number of rooms of the type, 0 when there are none' }
+      example: { roomType: Dobbeltværelse, capacity: 2, rooms: 24 }
+
+    AnalyticsCountry:
+      type: object
+      required: [countryCode, country]
+      properties:
+        countryCode: { type: string, minLength: 2, maxLength: 2, description: ISO 3166-1 alpha-2 }
+        country: { type: string, description: Danish name }
+      example: { countryCode: DK, country: Danmark }
 
     Error:
       type: object

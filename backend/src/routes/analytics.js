@@ -7,6 +7,9 @@ const TABLES = {
   bookings: (service) => service.bookings(),
   'bar-sales': (service) => service.barSales(),
   kpis: (service) => service.kpis(),
+  calendar: (service) => service.calendar(),
+  'room-types': (service) => service.roomTypes(),
+  countries: (service) => service.countries(),
 }
 
 // GET only: the dashboard has read access and nothing else (FR-014/FT17)

@@ -2,7 +2,7 @@ import { toKr } from '../money.js'
 import { nights } from './bookingService.js'
 import { eachNight, periodOn } from './pricing.js'
 
-const yearMonth = (date) => ({ year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) })
+const yearOf = (date) => Number(date.slice(0, 4))
 const sum = (values) => values.reduce((a, b) => a + b, 0)
 // Empty periods give 0 instead of NaN, so Tableau shows a number rather than a gap
 const ratio = (numerator, denominator) => (denominator === 0 ? 0 : numerator / denominator)
@@ -16,6 +16,21 @@ export function allocateRevenue(totalOre, weights) {
   )
   shares[shares.length - 1] += totalOre - sum(shares)
   return shares
+}
+
+// R10: whole calendar years from the earliest to the latest year in the data, so a fact row is never outside
+// the calendar; the calendar and the KPIs both use this, so they always have the same years (FR-017, FR-018)
+function calendarYears({ periods, bookings, barSales }) {
+  const years = [
+    ...periods.flatMap((period) => [period.startDate, period.endDate]),
+    ...bookings.flatMap((booking) => [booking.checkIn, booking.checkOut]),
+    ...barSales.map((sale) => sale.date),
+  ].map(yearOf)
+  if (years.length === 0) return []
+  // reduce, not Math.min(...years): spreading 100k+ dates overflows the call stack
+  const first = years.reduce((a, b) => Math.min(a, b))
+  const last = years.reduce((a, b) => Math.max(a, b))
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i)
 }
 
 export function createAnalyticsService({ analyticsRepo }) {
@@ -37,11 +52,8 @@ export function createAnalyticsService({ analyticsRepo }) {
       return dates.map((date, i) => ({
         bookingId: booking.id,
         date,
-        ...yearMonth(date),
-        season: seasons[i]?.seasonName ?? null,
         roomType: booking.roomType,
         countryCode: booking.countryCode,
-        country: booking.country,
         revenueOre: revenues[i],
       }))
     })
@@ -62,8 +74,6 @@ export function createAnalyticsService({ analyticsRepo }) {
           const soldRoomNights = sold.get(`${date}|${type.name}`) ?? 0
           return {
             date,
-            ...yearMonth(date),
-            season: period.seasonName,
             roomType: type.name,
             availableRoomNights: type.roomCount,
             soldRoomNights,
@@ -78,10 +88,8 @@ export function createAnalyticsService({ analyticsRepo }) {
     bookingId: booking.id,
     checkIn: booking.checkIn,
     checkOut: booking.checkOut,
-    ...yearMonth(booking.checkIn),
     roomType: booking.roomType,
     countryCode: booking.countryCode,
-    country: booking.country,
     guestCount: booking.guestCount,
     nights: nights(booking.checkIn, booking.checkOut),
     revenue: toKr(booking.totalPriceOre),
@@ -91,7 +99,6 @@ export function createAnalyticsService({ analyticsRepo }) {
   const toBarSaleRow = (sale) => ({
     saleId: sale.id,
     date: sale.date,
-    ...yearMonth(sale.date),
     drink: sale.drink,
     category: sale.category,
     quantity: sale.quantity,
@@ -99,6 +106,34 @@ export function createAnalyticsService({ analyticsRepo }) {
   })
 
   return {
+    async calendar() {
+      const [periods, bookings, barSales] = await Promise.all([
+        analyticsRepo.listPeriods(),
+        analyticsRepo.listBookings(),
+        analyticsRepo.listBarSales(),
+      ])
+      const years = calendarYears({ periods, bookings, barSales })
+      if (years.length === 0) return []
+      return [...eachNight(`${years[0]}-01-01`, `${years.at(-1) + 1}-01-01`)].map((date) => ({
+        date,
+        year: yearOf(date),
+        month: Number(date.slice(5, 7)),
+        season: periodOn(periods, date)?.seasonName ?? null,
+      }))
+    },
+
+    async roomTypes() {
+      return (await analyticsRepo.listRoomTypes()).map((type) => ({
+        roomType: type.name,
+        capacity: type.capacity,
+        rooms: type.roomCount,
+      }))
+    },
+
+    async countries() {
+      return (await analyticsRepo.listCountries()).map(({ code, name }) => ({ countryCode: code, country: name }))
+    },
+
     async roomNights() {
       const { roomNights } = await loadRoomNights()
       return roomNights.map(({ revenueOre, ...night }) => ({ ...night, revenue: toKr(revenueOre) }))
@@ -125,32 +160,23 @@ export function createAnalyticsService({ analyticsRepo }) {
       ])
       const occupancy = occupancyRows(loaded)
       const bookingRows = loaded.bookings.map(toBookingRow)
-      const sales = barSales.map((sale) => ({
-        ...sale,
-        ...yearMonth(sale.date),
-        revenueOre: sale.quantity * sale.unitPriceOre,
-      }))
-      // FT12: the score is given at check-out, so it counts in the check-out year, not the check-in year (R8)
-      const checkOuts = loaded.bookings.map((booking) => ({
-        year: yearMonth(booking.checkOut).year,
-        score: booking.satisfactionScore,
-      }))
-      const years = [...new Set([...loaded.roomNights, ...sales, ...checkOuts].map((row) => row.year))].sort(
-        (a, b) => a - b,
-      )
+      const sales = barSales.map((sale) => ({ ...sale, revenueOre: sale.quantity * sale.unitPriceOre }))
+      const years = calendarYears({ periods: loaded.periods, bookings: loaded.bookings, barSales })
       const generatedAt = new Date().toISOString()
 
       return years.flatMap((year) => {
-        const inYear = (rows) => rows.filter((row) => row.year === year)
+        const inYear = (rows, dateField = 'date') => rows.filter((row) => yearOf(row[dateField]) === year)
         const nightsInYear = inYear(loaded.roomNights)
         const occupancyInYear = inYear(occupancy)
-        const bookingsInYear = inYear(bookingRows)
+        // FT6: a booking counts in its check-in year
+        const bookingsInYear = inYear(bookingRows, 'checkIn')
         const salesInYear = inYear(sales)
         const roomRevenueOre = sum(nightsInYear.map((night) => night.revenueOre))
         const barRevenueOre = sum(salesInYear.map((sale) => sale.revenueOre))
+        // FT12: the score is given at check-out, so it counts in the check-out year, not the check-in year (R8).
         // null = not registered, so it is not a response
-        const scores = inYear(checkOuts)
-          .map((checkOut) => checkOut.score)
+        const scores = inYear(loaded.bookings, 'checkOut')
+          .map((booking) => booking.satisfactionScore)
           .filter((score) => score != null)
         const row = (kpi, label, value, unit, dimension = null) => ({
           year,

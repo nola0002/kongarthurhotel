@@ -2,12 +2,13 @@ import { pool } from '../db.js'
 import { toOre } from '../money.js'
 import { getPeriods, getPrices } from './pricingRepository.js'
 
+export { listCountries } from './referenceRepository.js'
+
 export async function listBookings() {
   const [rows] = await pool.execute(
     `SELECT b.id, b.check_in AS checkIn, b.check_out AS checkOut, b.guest_count AS guestCount,
-       b.total_price AS totalPrice, b.satisfaction_score AS satisfactionScore, rt.name AS roomType, c.code AS countryCode, c.name AS country
+       b.total_price AS totalPrice, b.satisfaction_score AS satisfactionScore, rt.name AS roomType, b.country_code AS countryCode
      FROM bookings b
-     JOIN countries c ON c.code = b.country_code
      JOIN rooms r ON r.id = b.room_id
      JOIN room_types rt ON rt.id = r.room_type_id
      ORDER BY b.check_in, b.id`,
@@ -20,9 +21,9 @@ export const listPeriods = () => getPeriods(pool, '1000-01-01', '9999-12-31')
 
 export async function listRoomTypes() {
   const [rows] = await pool.execute(
-    `SELECT rt.id, rt.name, COUNT(r.id) AS roomCount
+    `SELECT rt.id, rt.name, rt.capacity, COUNT(r.id) AS roomCount
      FROM room_types rt LEFT JOIN rooms r ON r.room_type_id = rt.id
-     GROUP BY rt.id, rt.name ORDER BY rt.id`,
+     GROUP BY rt.id, rt.name, rt.capacity ORDER BY rt.id`,
   )
   return Promise.all(rows.map(async (row) => ({ ...row, prices: await getPrices(pool, row.id) })))
 }
