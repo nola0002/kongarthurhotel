@@ -1,0 +1,4 @@
+# Bash refuses a CRLF shebang (Git for Windows checks out CRLF by default), so MySQL init would fail
+*.sh text eol=lf
+# The assignment's source files must stay byte-identical to ITAKEA/hoteldata (the CSV has CRLF), so git never converts them
+source/* -text
