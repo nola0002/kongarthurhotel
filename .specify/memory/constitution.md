@@ -1,21 +1,14 @@
 <!--
 Sync Impact Report
-- Version change: template → 1.0.0 (første udfyldte version) → 1.1.0 (teknologisk stack
-  fastlagt: Docker Compose, MySQL, Node.js/Express, React + Tailwind; jf. FigJam-siden
-  "Arkitektur") → 1.2.0 (JS, mysql2, node:test, engelsk kode/dansk UI; bindende
-  retningslinjer i AGENTS.md og docs/retningslinjer/)
-- Principper tilføjet: I. Trelagsarkitektur, II. API-først med OpenAPI-kontrakt,
-  III. Forretningslogik og nøgletal i logiklaget, IV. Containeriseret og reproducerbart miljø,
-  V. Testbar forretningslogik, VI. Enkelhed og ejerskab
-- Sektioner tilføjet: Teknologiske rammer, Udviklingsproces og aflevering, Governance
-- Sektioner fjernet: ingen
-- Kilde: kravtabeller på FigJam-boardet "systemudvikling" (side "Krav"), ID'er A*, T*, D*
-- Templates: plan/spec/tasks-templates læser constitution ved kørsel; ingen ændringer nødvendige
-- Follow-up TODOs:
-  - Dublet-ID'er på kravboardet (A5 x2, T6 x2) bør omnummereres; her refereres A5b og T6b
-- Fjern denne kommentar før commit.
+- Version: 1.2.0 → 1.2.1 (PATCH: præcisering af princip III, intet princip fjernet eller tilføjet)
+- Ændret princip: III. Forretningslogik og nøgletal i logiklaget – præciserer, at aggregering,
+  filtrering, sortering og forholdet mellem to backend-beregnede summer er tilladt i
+  frontend/Tableau; formler, fordeling og regler er stadig forbudt.
+- Tilføjede sektioner: ingen. Fjernede sektioner: ingen.
+- Templates: ingen ændringer nødvendige (plan-template læser constitution ved kørsel).
+- Følgeændring: specs/002-bi-dashboard/plan.md Complexity Tracking kan henvise til III.
+- Udestående: ingen.
 -->
-
 # Kong Arthur Hotelsystem Constitution
 
 ## Core Principles
@@ -51,10 +44,16 @@ Alle forretningsregler MUST ligge i logiklaget, bl.a. kapacitetstjek, forhindrin
 dobbeltbooking og prisberegning ud fra værelsestype, sæson og antal nætter. Det samme gælder
 nøgletal: belægningsgrad, indtjening, barsalg og selvvalgte nøgletal (A4).
 
-Frontend og Tableau MUST NOT genberegne nøgletal eller forretningsregler. De viser kun det,
-API'et returnerer. Placeringen af hver beregning MUST kunne begrundes ved fremlæggelsen.
+Frontend og Tableau MUST NOT genberegne nøgletal eller forretningsregler, dvs. formler,
+fordeling og regler. De MAY aggregere (summere, tælle), filtrere og sortere rækker fra API'et
+og vise forholdet mellem to summer, når API'et selv har beregnet tæller og nævner (fx
+belægning for et valgt udsnit = SUM(solgte) / SUM(tilgængelige) værelsesnætter). Formlens
+definition MUST ligge i logiklaget, og de autoritative tal MUST leveres færdigberegnet af
+API'et. Placeringen af hver beregning MUST kunne begrundes ved fremlæggelsen.
 
 **Rationale**: Krav A4 og tillægsspørgsmål 4. Samme tal overalt, og reglerne kan testes uden UI.
+Aggregering er tilladt, fordi interaktiv filtrering (FT16) kræver det, og spec 002 FR-011
+tillader aggregering og filtrering til visning.
 
 ### IV. Containeriseret og reproducerbart miljø
 
@@ -142,4 +141,4 @@ versionsbump:
 Ved hvert converge-tjek og før aflevering MUST implementeringen kontrolleres mod
 principperne.
 
-**Version**: 1.2.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-27
+**Version**: 1.2.1 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-30
