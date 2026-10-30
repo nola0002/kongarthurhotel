@@ -6,7 +6,7 @@ selvstændig: alt, der skal til for at bygge UI'et, står her.
 | Fil | Indhold |
 |---|---|
 | `README.md` (denne) | Principperne: *hvorfor* det ser ud og opfører sig, som det gør |
-| [`tokens.md`](tokens.md) | Farver, typografi, radier, skygger og bevægelse, klar til at kopiere ind i `index.css` |
+| [`tokens.md`](tokens.md) | Roller for farver, typografi, radier, skygger og bevægelse (værdierne bor i `frontend/src/index.css`) |
 | [`komponenter.md`](komponenter.md) | UI-primitiver og opskrifter: knap, input, tabel, skuffe-formular, bekræftelse, toast m.m. |
 | [`skaerme.md`](skaerme.md) | Kong Arthurs skærme og flows koblet til kravene i `specs/001-backoffice-bookinger` |
 
@@ -62,13 +62,13 @@ princip, der afgør den.
     visning kan deles og genindlæses. Ved indtastning bruges `replace: true`, så historikken
     ikke fyldes op.
 
-12. **Dansk og lokale formater.** Danske ugedage, `da-DK`-valuta ("1.800 kr."), relative datoer
-    ("i morgen") og danske URL'er (`/bookinger`, `/barsalg`).
+12. **Dansk og lokale formater.** Danske ugedage, `da-DK`-valuta ("1.800 kr."), datoer som
+    "tir. 10. mar." og danske URL'er (`/bookinger`, `/barsalg`).
 
 13. **Bekræft det destruktive, valider tæt på feltet.** Sletning kræver en dialog, der gentager
     hvad der slettes. Fejl fra API'et vises under det felt, de handler om. Backend er
     autoriteten. Frontend regner, tæller og summerer ikke selv, og fejltekster kommer altid fra
-    API'ets `error.message`. Frontendens egne tekster er kun overskrifter, knapper, tomme
+    API'ets `error.message` (eneste undtagelse: et fejlsvar uden JSON, se `api.js`). Frontendens egne tekster er kun overskrifter, knapper, tomme
     tilstande og succes-toasts.
 
 ## Afhængigheder (frontend)
@@ -100,7 +100,7 @@ frontend/src/
   main.jsx        router + login-guard (loader)
   index.css       tokens (@theme) – single source of truth for design
   ui.jsx          alle delte primitiver (Button, Tile, Stat, EmptyState …)
-  format.js       kr(), date(), relative() … – al formatering ét sted
+  format.js       kr(), date(), period() … – al formatering ét sted
   api.js          ÉT modul til alle kald mod backend
   Shell.jsx       sidebar + indholdskort + toast-provider
   BookingForm.jsx skuffe-formular til opret OG rediger
