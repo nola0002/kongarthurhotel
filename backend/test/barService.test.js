@@ -7,23 +7,18 @@ function fakeService() {
   const inserted = []
   const service = createBarService({
     barRepo: {
-      insertSale: async (sale) => inserted.push(sale),
+      insertSale: async (conn, sale) => inserted.push(sale),
+      // Like the SQL: the inserted rows and SUM(quantity * unit_price)
       listSales: async () => ({
-        totalOre: 0,
-        rows: [
-          {
-            id: 1,
-            drinkId: 1,
-            quantity: inserted[0].quantity,
-            unitPriceOre: inserted[0].unitPriceOre,
-            soldAt: '2026-03-11T20:00:00',
-          },
-        ],
+        totalOre: inserted.reduce((sum, sale) => sum + sale.quantity * sale.unitPriceOre, 0),
+        rows: inserted.map((sale, i) => ({ id: i + 1, ...sale, soldAt: '2026-03-11T20:00:00' })),
       }),
     },
     referenceRepo: {
-      getDrink: async (id) =>
-        id === 1 ? { id: 1, name: 'Espresso Martini', category: 'Cocktail', priceOre: 9500 } : null,
+      listDrinks: async () => [
+        { id: 1, name: 'Espresso Martini', category: 'Cocktail', priceOre: 9500 },
+        { id: 2, name: 'Cappuccino', category: 'Kaffe', priceOre: 4250 },
+      ],
     },
     bookingRepo: {
       findById: async (id) =>
@@ -32,6 +27,7 @@ function fakeService() {
           2: { id: 2, checkIn: '2026-03-09', checkOut: '2026-03-11' },
         })[id] ?? null,
     },
+    withTransaction: (fn) => fn('conn'),
     today: () => '2026-03-11',
   })
   return { service, inserted }
@@ -66,4 +62,42 @@ test('FR-010: an unknown drink is rejected', async () => {
     code: 'VALIDATION_ERROR',
     field: 'drinkId',
   })
+})
+
+test('005 FR-012: the order total is the sum of its lines at current prices', async () => {
+  const { service } = fakeService()
+  const order = await service.registerOrder({
+    items: [
+      { drinkId: 1, quantity: 2 },
+      { drinkId: 2, quantity: 1 },
+    ],
+  })
+  // 2 × 95 + 1 × 42.50 = 232.50
+  assert.equal(order.total, 232.5)
+  assert.deepEqual(
+    order.items.map((item) => item.amount),
+    [190, 42.5],
+  )
+})
+
+test('005 FR-012: an unknown drink in one line inserts no lines', async () => {
+  const { service, inserted } = fakeService()
+  await assert.rejects(
+    service.registerOrder({
+      items: [
+        { drinkId: 1, quantity: 1 },
+        { drinkId: 99, quantity: 1 },
+      ],
+    }),
+    { code: 'VALIDATION_ERROR' },
+  )
+  assert.equal(inserted.length, 0)
+})
+
+test('005 FR-011: an order cannot be put on a guest who does not stay today', async () => {
+  const { service, inserted } = fakeService()
+  await assert.rejects(service.registerOrder({ bookingId: 2, items: [{ drinkId: 1, quantity: 1 }] }), {
+    code: 'BOOKING_NOT_IN_HOUSE',
+  })
+  assert.equal(inserted.length, 0)
 })

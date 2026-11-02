@@ -1,6 +1,8 @@
 import { AppError } from '../errors.js'
 import { toKr } from '../money.js'
-import { calculateStayPrice } from './pricing.js'
+import { allocateRevenue } from './analyticsService.js'
+import { toApi as toApiSale } from './barService.js'
+import { calculateStayPrice, eachNight, periodOn } from './pricing.js'
 
 const DAY_MS = 86_400_000
 
@@ -9,10 +11,13 @@ export const nights = (checkIn, checkOut) => (Date.parse(checkOut) - Date.parse(
 // The only definition of "the guest stays at the hotel on day d" (R12)
 export const isInHouseOn = (booking, d) => booking.checkIn <= d && d < booking.checkOut
 
-export function deriveStatus(booking, today) {
-  if (today < booking.checkIn) return 'upcoming'
-  if (today === booking.checkIn) return 'arriving'
-  if (isInHouseOn(booking, today)) return 'in_house'
+// A stay that began before today counts as checked in and one that ended before today as checked out, because
+// only today's arrivals and departures are ever registered (005 FR-003, R3)
+export function deriveStatus({ checkIn, checkOut, checkedInAt, checkedOutAt }, today) {
+  if (today < checkIn) return 'upcoming'
+  if (today === checkIn && !checkedInAt) return 'arriving'
+  if (today < checkOut) return 'in_house'
+  if (today === checkOut) return checkedOutAt ? 'checked_out' : 'departing'
   return 'departed'
 }
 
@@ -50,12 +55,22 @@ export const toApi = (row, today) => ({
   source: row.source,
   status: deriveStatus(row, today),
   satisfactionScore: row.satisfactionScore,
+  checkedInAt: row.checkedInAt,
+  checkedOutAt: row.checkedOutAt,
   createdAt: row.createdAt,
 })
 
 const notFound = () => new AppError('NOT_FOUND', 'Bookingen findes ikke længere')
 
-export function createBookingService({ bookingRepo, roomRepo, pricingRepo, referenceRepo, withTransaction, today }) {
+export function createBookingService({
+  bookingRepo,
+  roomRepo,
+  pricingRepo,
+  referenceRepo,
+  barRepo,
+  withTransaction,
+  today,
+}) {
   // quote() skips name and country: the form asks for a price before they are filled in
   async function validate(
     { firstName, familyName, countryCode, roomTypeId, checkIn, checkOut, guestCount },
@@ -116,29 +131,99 @@ export function createBookingService({ bookingRepo, roomRepo, pricingRepo, refer
     return { roomId: room.id, totalPriceOre: totalOre }
   }
 
-  async function getBooking(id) {
+  async function findOrFail(id) {
     const row = await bookingRepo.findById(id)
     if (!row) throw notFound()
-    return toApi(row, today())
+    return row
+  }
+
+  const getBooking = async (id) => toApi(await findOrFail(id), today())
+
+  // 005 FR-003: a registration is only valid on the day itself, so the status decides
+  async function register(id, requiredStatus, mark, message) {
+    if (deriveStatus(await findOrFail(id), today()) !== requiredStatus) throw new AppError('INVALID_STATUS', message)
+    if ((await mark(id)) === 0) throw notFound()
+    return getBooking(id)
   }
 
   return {
     getBooking,
 
-    async listBookings({ q, date, view, limit }) {
+    // 005 FR-005–FR-007: counts use every filter except the view, so the tabs show what each view would hold
+    async listBookings({ q, date, view, roomTypeId, countryCode, from, to, sort, order, page, pageSize }) {
       const day = today()
-      const dateBounds = date ? viewToDateBounds('in_house', date) : {}
-      const filtersFor = (v) => ({ q, ...tightest(dateBounds, viewToDateBounds(v, day)) })
+      // A number may be a booking id or a room number, so the command palette finds both (005 FR-016)
+      const searchNumber = /^\d+$/.test(q ?? '') ? q : undefined
+      const bounds = tightest(date ? viewToDateBounds('in_house', date) : {}, {
+        checkInOnOrBefore: to,
+        checkOutAfter: from,
+      })
+      const filtersFor = (v) => ({
+        q,
+        searchNumber,
+        roomTypeId,
+        countryCode,
+        ...tightest(bounds, viewToDateBounds(v, day)),
+      })
       const activeView = q || date ? 'all' : view
-      const [result, upcoming, inHouse, departed] = await Promise.all([
-        bookingRepo.list({ ...filtersFor(activeView), limit, order: activeView === 'departed' ? 'desc' : 'asc' }),
+      const [summary, upcoming, inHouse, departed] = await Promise.all([
+        bookingRepo.summary(filtersFor(activeView)),
         ...['upcoming', 'in_house', 'departed'].map((v) => bookingRepo.count(filtersFor(v))),
       ])
+      const pageCount = Math.max(1, Math.ceil(summary.total / pageSize))
+      // A page after the last gives the last page, e.g. when a filter shrinks the result (contract)
+      const currentPage = Math.min(page, pageCount)
+      const rows = await bookingRepo.list({
+        ...filtersFor(activeView),
+        sort,
+        order: sort === 'nearest' ? 'asc' : (order ?? (activeView === 'departed' ? 'desc' : 'asc')),
+        today: day,
+        limit: pageSize,
+        offset: (currentPage - 1) * pageSize,
+      })
       return {
-        total: result.total,
-        totalPrice: toKr(result.totalPriceOre),
+        total: summary.total,
+        totalPrice: toKr(summary.totalPriceOre),
         counts: { upcoming, in_house: inHouse, departed, all: upcoming + inHouse + departed },
-        items: result.rows.map((row) => toApi(row, day)),
+        page: currentPage,
+        pageSize,
+        pageCount,
+        items: rows.map((row) => toApi(row, day)),
+      }
+    },
+
+    // 005 FR-008, FR-009: the guest's folio, i.e. the stay night by night, the bar sales and the bill
+    async getFolio(id) {
+      const row = await findOrFail(id)
+      const [[periods, prices], sales] = await Promise.all([
+        withTransaction((conn) =>
+          Promise.all([
+            pricingRepo.getPeriods(conn, row.checkIn, row.checkOut),
+            pricingRepo.getPrices(conn, row.roomTypeId),
+          ]),
+        ),
+        barRepo.listSales({ bookingId: id }),
+      ])
+      const dates = [...eachNight(row.checkIn, row.checkOut)]
+      const seasons = dates.map((date) => periodOn(periods, date))
+      // R6: same split as BI (002 FR-015), so the nights sum to the frozen price even when the price list changed
+      const shares = allocateRevenue(
+        row.totalPriceOre,
+        seasons.map((period) => prices.get(period?.seasonId) ?? 0),
+      )
+      return {
+        booking: toApi(row, today()),
+        nights: dates.map((date, i) => ({
+          date,
+          season: seasons[i]?.seasonName ?? null,
+          price: toKr(shares[i]),
+        })),
+        barSales: { total: toKr(sales.totalOre), items: sales.rows.map(toApiSale) },
+        bill: {
+          stay: toKr(row.totalPriceOre),
+          bar: toKr(sales.totalOre),
+          total: toKr(row.totalPriceOre + sales.totalOre),
+        },
       }
     },
 
@@ -188,8 +273,7 @@ export function createBookingService({ bookingRepo, roomRepo, pricingRepo, refer
     },
 
     async updateBooking(id, input) {
-      const existing = await bookingRepo.findById(id)
-      if (!existing) throw notFound()
+      const existing = await findOrFail(id)
       const { names, roomType } = await validate(input)
       const { countryCode, checkIn, checkOut, guestCount } = input
       await withTransaction(async (conn) => {
@@ -212,11 +296,16 @@ export function createBookingService({ bookingRepo, roomRepo, pricingRepo, refer
       return getBooking(id)
     },
 
-    // The guest can only rate the stay once it is over: on or after the departure day (FR-011 (003))
+    checkIn: (id) =>
+      register(id, 'arriving', bookingRepo.markCheckedIn, 'Kun en booking, der ankommer i dag, kan tjekkes ind'),
+    checkOut: (id) =>
+      register(id, 'departing', bookingRepo.markCheckedOut, 'Kun en booking, der rejser i dag, kan tjekkes ud'),
+
+    // The guest can only rate the stay once it is over: on or after the departure day, checked out or not
+    // (FR-011 (003), 005 R3)
     async registerSatisfaction(id, score) {
-      const booking = await bookingRepo.findById(id)
-      if (!booking) throw notFound()
-      if (deriveStatus(booking, today()) !== 'departed') {
+      const booking = await findOrFail(id)
+      if (today() < booking.checkOut) {
         throw new AppError('BOOKING_NOT_DEPARTED', 'Tilfredshed kan først registreres på afrejsedagen', {
           field: 'score',
         })

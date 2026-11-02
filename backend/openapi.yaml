@@ -4,7 +4,8 @@ info:
   version: 1.0.0
   description: |
     REST/JSON API for the Kong Arthur back office (feature 001), the management
-    dashboard in Tableau (feature 002) and the reception's daily overview and room plan (feature 003).
+    dashboard in Tableau (feature 002), the reception's daily overview and room plan (feature 003)
+    and the back office's check-in/out, folio, bar till, revenue and administration (feature 005).
     This file is the single source of truth for the API: it is served by Swagger UI
     and every request is validated against it (express-openapi-validator).
 
@@ -46,6 +47,8 @@ info:
     | 422 | `PRICE_NOT_CONFIGURED` | A night in the stay has no season or price (FR-008) |
     | 422 | `BOOKING_NOT_IN_HOUSE` | Bar sale on a guest who is not staying at the hotel today (FR-010a) |
     | 422 | `BOOKING_NOT_DEPARTED` | Satisfaction score before the guest's departure day (003 FR-011) |
+    | 422 | `INVALID_STATUS` | Check-in/out that does not fit the booking's status today (005 FR-003) |
+    | 422 | `WRONG_PASSWORD` | The current password is wrong when changing it (005 FR-019) |
     | 500 | `INTERNAL_ERROR` | Unexpected error; details are only logged on the server |
 servers:
   - url: /api
@@ -65,6 +68,10 @@ tags:
     description: |
       One endpoint per reception screen (feature 003). Counts, free rooms and status are computed
       by the backend; the frontend only shows them (FR-017).
+  - name: Revenue
+    description: Revenue for the reception's revenue page (005 FR-014). All formulas live in the backend.
+  - name: Admin
+    description: Price list and drink prices (005 FR-020). New prices apply to new bookings and sales only.
   - name: Analytics
     description: |
       Read-only data for the Tableau dashboard (feature 002). Every endpoint returns a flat array
@@ -124,14 +131,38 @@ paths:
                   username: { type: string }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /auth/password:
+    put:
+      tags: [Auth]
+      summary: Change the logged-in user's password (005 FR-019)
+      description: 'Wrong current password gives 422 WRONG_PASSWORD with `field` = `currentPassword`. The session stays valid.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, minLength: 1, maxLength: 200 }
+                newPassword: { type: string, minLength: 8, maxLength: 200 }
+      responses:
+        '204': { description: Changed }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
   /bookings:
     get:
       tags: [Bookings]
-      summary: List and search bookings (FR-001, FR-002)
+      summary: List, search, sort and page bookings (FR-001, FR-002, 005 FR-005–FR-007, FR-016)
       parameters:
         - name: q
           in: query
-          description: "Case-insensitive partial match on first name, family name or 'first family'"
+          description: |
+            Case-insensitive partial match on first name, family name or 'first family'. If `q` is only
+            digits, it also matches the booking id exactly and the room number exactly (005 FR-016).
           schema: { type: string, maxLength: 150 }
         - name: date
           in: query
@@ -149,27 +180,57 @@ paths:
 
             If `q` or `date` is set, `view` is ignored and `all` is used.
           schema: { type: string, enum: [upcoming, in_house, departed, all], default: upcoming }
-        - name: limit
+        - name: roomTypeId
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+          schema: { type: integer, minimum: 1 }
+        - name: countryCode
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 2 }
+        - name: from
+          in: query
+          description: With `to`, only stays overlapping the period (checkIn <= to AND checkOut > from). Either may be alone
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: sort
+          in: query
+          description: |
+            Sort over all matching bookings; ties are broken by id. `nearest` = closest check-in to today first
+            (used by the command palette).
+          schema: { type: string, enum: [checkIn, checkOut, guest, nights, totalPrice, nearest], default: checkIn }
+        - name: order
+          in: query
+          description: Default `asc`, but `desc` for `view=departed`. Ignored for `sort=nearest`
+          schema: { type: string, enum: [asc, desc] }
+        - name: page
+          in: query
+          description: 1-based. A page after the last returns the last page (`page` in the response says which)
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 250, default: 50 }
       responses:
         '200':
-          description: Matching bookings ordered by check-in, newest first for `view=departed`
+          description: One page of matching bookings
           content:
             application/json:
               schema:
                 type: object
-                required: [total, totalPrice, counts, items]
+                required: [total, totalPrice, counts, page, pageSize, pageCount, items]
                 properties:
-                  total: { type: integer, description: 'All matching bookings, not only the first `limit`' }
+                  page: { type: integer, description: 'The page returned (clamped to 1..pageCount)' }
+                  pageSize: { type: integer }
+                  pageCount: { type: integer, description: 'ceil(total / pageSize), at least 1' }
+                  total: { type: integer, description: 'All matching bookings, not only this page' }
                   totalPrice:
                     {
                       type: number,
-                      description: 'Sum of totalPrice in DKK over all matching bookings, not only the first `limit`',
+                      description: 'Sum of totalPrice in DKK over all matching bookings, not only this page',
                     }
                   counts:
                     type: object
-                    description: 'Matches per view for the current `q`/`date` filters'
+                    description: 'Matches per view for the current filters (everything except `view`)'
                     required: [upcoming, in_house, departed, all]
                     properties:
                       upcoming: { type: integer }
@@ -178,7 +239,7 @@ paths:
                       all: { type: integer }
                   items:
                     type: array
-                    description: 'At most `limit` bookings'
+                    description: 'At most `pageSize` bookings'
                     items: { $ref: '#/components/schemas/Booking' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -283,6 +344,58 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /bookings/{id}/folio:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [Bookings]
+      summary: The guest's folio, i.e. booking, nights, bar sales and bill (005 FR-008, FR-009)
+      responses:
+        '200':
+          description: Folio
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Folio' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /bookings/{id}/check-in:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [Bookings]
+      summary: Register check-in now (005 FR-003)
+      description: Only when `status` = `arriving` (checkIn = today, not checked in), otherwise 422 INVALID_STATUS.
+      responses:
+        '200':
+          description: Updated booking
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
+  /bookings/{id}/check-out:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [Bookings]
+      summary: Register check-out now (005 FR-003)
+      description: Only when `status` = `departing` (checkOut = today, not checked out), otherwise 422 INVALID_STATUS.
+      responses:
+        '200':
+          description: Updated booking
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
   /bookings/{id}/satisfaction:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
@@ -290,7 +403,8 @@ paths:
       tags: [Bookings]
       summary: Register or correct the guest's satisfaction score 1–5 at check-out (003 FR-011–FR-013)
       description: |
-        Only on or after the departure day (`status` = `departed`), otherwise 422 BOOKING_NOT_DEPARTED.
+        Only on or after the departure day (today >= checkOut, i.e. `status` is `departing`, `checked_out` or
+        `departed`), otherwise 422 BOOKING_NOT_DEPARTED.
         A new call replaces the score. Session only: the booking system's key gives 401 (003 FR-018).
       requestBody:
         required: true
@@ -410,6 +524,136 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/BusinessRule' }
+
+  /bar-sales/orders:
+    post:
+      tags: [Bar]
+      summary: Register a till order with several lines at once (005 FR-011, FR-012)
+      description: |
+        All lines are registered in one transaction with each drink's current price, or none if one line is
+        invalid. `bookingId` null = paid directly; otherwise the guest must stay at the hotel today (FR-010a).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                bookingId: { type: integer, minimum: 1, nullable: true }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 30
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [drinkId, quantity]
+                    properties:
+                      drinkId: { type: integer, minimum: 1 }
+                      quantity: { type: integer, minimum: 1, maximum: 100 }
+            example: { bookingId: null, items: [{ drinkId: 2, quantity: 2 }, { drinkId: 25, quantity: 1 }] }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items]
+                properties:
+                  total: { type: number, description: Sum of the lines in DKK }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/BarSale' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+
+  /revenue:
+    get:
+      tags: [Revenue]
+      summary: Bar revenue (primary) and room revenue for a period (005 FR-014, FR-015)
+      description: |
+        `from` and `to` are both inclusive. Bar revenue is quantity × unit price at the time of sale. Room revenue is
+        split per night as in 002 FR-015, so only nights inside the period count. `groupBy=day` over more than
+        1096 days gives 400 VALIDATION_ERROR (`field: groupBy`); `to` before `from` gives 400 (`field: to`).
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: groupBy, in: query, schema: { type: string, enum: [day, month, year], default: month } }
+      responses:
+        '200':
+          description: Revenue
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Revenue' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/prices:
+    get:
+      tags: [Admin]
+      summary: The price list, i.e. price per night per room type and season (005 FR-020)
+      responses:
+        '200':
+          description: Price list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriceList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/prices/{roomTypeId}/{seasonId}:
+    parameters:
+      - { name: roomTypeId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      - { name: seasonId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    put:
+      tags: [Admin]
+      summary: Set the price per night for a room type in a season (005 FR-020)
+      description: Creates the price if the pair has none. Existing bookings keep their frozen price (FR-009).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PriceInput' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roomTypeId, seasonId, price]
+                properties:
+                  roomTypeId: { type: integer }
+                  seasonId: { type: integer }
+                  price: { type: number }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/drinks/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    put:
+      tags: [Admin]
+      summary: Set a drink's price (005 FR-020)
+      description: Existing bar sales keep their frozen unit price (FR-010).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PriceInput' }
+      responses:
+        '200':
+          description: The drink with its new price
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Drink' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /reception/overview:
     get:
@@ -705,6 +949,8 @@ components:
           source,
           status,
           satisfactionScore,
+          checkedInAt,
+          checkedOutAt,
           createdAt,
         ]
       properties:
@@ -732,19 +978,30 @@ components:
         source: { type: string, enum: [backoffice, booking_system] }
         status:
           type: string
-          enum: [upcoming, arriving, in_house, departed]
+          enum: [upcoming, arriving, in_house, departing, checked_out, departed]
           description: |
-            Derived by the backend from the dates and today (Europe/Copenhagen), not stored.
+            Derived by the backend from the dates, today (Europe/Copenhagen) and the check-in/out registrations,
+            not stored (005 FR-003, FR-004). A stay that began before today counts as checked in.
             - `upcoming`: today < checkIn
-            - `arriving`: today = checkIn
-            - `in_house`: checkIn < today < checkOut
-            - `departed`: today >= checkOut
+            - `arriving`: today = checkIn and not checked in
+            - `in_house`: checkIn <= today < checkOut, and checked in or checkIn < today
+            - `departing`: today = checkOut and not checked out
+            - `checked_out`: today = checkOut and checked out
+            - `departed`: today > checkOut
         satisfactionScore:
           type: integer
           nullable: true
           minimum: 1
           maximum: 5
           description: 'Guest satisfaction 1–5 registered at check-out; null = not registered (003 FR-011)'
+        checkedInAt:
+          type: string
+          nullable: true
+          description: 'When check-in was registered; local time ISO without offset. null = not registered (005 FR-003)'
+        checkedOutAt:
+          type: string
+          nullable: true
+          description: 'When check-out was registered; local time ISO without offset. null = not registered'
         createdAt: { type: string, description: 'Lokal tid (Europe/Copenhagen), ISO uden offset (YYYY-MM-DDTHH:mm:ss)' }
       example:
         id: 10384
@@ -761,6 +1018,8 @@ components:
         source: backoffice
         status: upcoming
         satisfactionScore: null
+        checkedInAt: null
+        checkedOutAt: null
         createdAt: '2026-10-29T14:03:12'
 
     SatisfactionInput:
@@ -858,9 +1117,39 @@ components:
 
     ReceptionOverview:
       type: object
-      required: [date, arrivals, departures, inHouse, rooms, barSalesTotal]
+      required: [date, arrivals, departures, inHouse, rooms, barSalesTotal, kpis]
       properties:
         date: { type: string, format: date }
+        kpis:
+          type: object
+          description: The four tiles at the top of the overview, computed by the backend (005 FR-001, FR-002)
+          required: [occupancy, arrivals, departures, averageRate]
+          properties:
+            occupancy:
+              type: object
+              description: Rooms occupied the night of `date` out of all rooms; rate = occupied / total (0–1)
+              required: [occupied, total, rate]
+              properties:
+                occupied: { type: integer }
+                total: { type: integer }
+                rate: { type: number }
+            arrivals:
+              type: object
+              description: 'remaining = arrivals whose status is upcoming or arriving'
+              required: [remaining, total]
+              properties:
+                remaining: { type: integer }
+                total: { type: integer }
+            departures:
+              type: object
+              description: 'remaining = departures whose status is not checked_out or departed'
+              required: [remaining, total]
+              properties:
+                remaining: { type: integer }
+                total: { type: integer }
+            averageRate:
+              type: number
+              description: 'Average price per night in DKK of the stays the night of `date` (totalPrice / nights per stay); 0 when none'
         arrivals:
           type: array
           description: Bookings with checkIn = date. `status` is relative to today, not to `date`
@@ -896,6 +1185,11 @@ components:
         inHouse: { bookings: 151, guests: 297 }
         rooms: [{ roomTypeId: 1, roomType: Standard enkeltværelse, total: 40, occupied: 31, free: 9 }]
         barSalesTotal: 1240.5
+        kpis:
+          occupancy: { occupied: 151, total: 214, rate: 0.7056 }
+          arrivals: { remaining: 28, total: 40 }
+          departures: { remaining: 5, total: 37 }
+          averageRate: 1712.4
 
     RoomPlan:
       type: object
@@ -966,8 +1260,179 @@ components:
         guestCount: { type: integer }
         status:
           type: string
-          enum: [upcoming, arriving, in_house, departed]
+          enum: [upcoming, arriving, in_house, departing, checked_out, departed]
           description: Same values and rule as Booking.status (relative to today)
+
+    Folio:
+      type: object
+      required: [booking, nights, barSales, bill]
+      properties:
+        booking: { $ref: '#/components/schemas/Booking' }
+        nights:
+          type: array
+          description: |
+            One line per night. `price` is the night's share of the frozen totalPrice, split in proportion to each
+            night's season price (as 002 FR-015), so the lines sum to totalPrice exactly (005 FR-008).
+          items:
+            type: object
+            required: [date, season, price]
+            properties:
+              date: { type: string, format: date }
+              season: { type: string, nullable: true }
+              price: { type: number }
+        barSales:
+          type: object
+          required: [total, items]
+          properties:
+            total: { type: number }
+            items:
+              type: array
+              description: Sales on the booking, newest first
+              items: { $ref: '#/components/schemas/BarSale' }
+        bill:
+          type: object
+          description: 'stay = booking.totalPrice, bar = barSales.total, total = stay + bar (005 FR-009)'
+          required: [stay, bar, total]
+          properties:
+            stay: { type: number }
+            bar: { type: number }
+            total: { type: number }
+
+    Revenue:
+      type: object
+      required: [from, to, groupBy, total, bar, rooms]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        groupBy: { type: string, enum: [day, month, year] }
+        total: { type: number, description: bar.total + rooms.total }
+        bar:
+          type: object
+          required: [total, quantity, byCategory, byPeriod, topDrinks]
+          properties:
+            total: { type: number }
+            quantity: { type: integer, description: Units sold }
+            byCategory:
+              type: array
+              description: Every category from the database, also with 0; shares sum to 1 (or are all 0)
+              items:
+                type: object
+                required: [category, total, quantity, share]
+                properties:
+                  category: { type: string }
+                  total: { type: number }
+                  quantity: { type: integer }
+                  share: { type: number, description: 'Fraction 0–1 of bar.total' }
+            byPeriod:
+              type: array
+              description: |
+                Only periods with sales, ascending. `period` is YYYY-MM-DD, YYYY-MM or YYYY for day, month and year.
+              items:
+                type: object
+                required: [period, total, categories]
+                properties:
+                  period: { type: string }
+                  total: { type: number }
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      required: [category, total]
+                      properties:
+                        category: { type: string }
+                        total: { type: number }
+            topDrinks:
+              type: array
+              description: The 5 drinks with the highest revenue in the period, highest first
+              items:
+                type: object
+                required: [drink, category, quantity, total]
+                properties:
+                  drink: { type: string }
+                  category: { type: string }
+                  quantity: { type: integer }
+                  total: { type: number }
+        rooms:
+          type: object
+          required: [total, nights, byPeriod]
+          properties:
+            total: { type: number, description: Room revenue of the nights inside the period }
+            nights: { type: integer, description: Sold room nights inside the period }
+            byPeriod:
+              type: array
+              description: Only periods with nights, ascending, same `period` format as bar.byPeriod
+              items:
+                type: object
+                required: [period, total]
+                properties:
+                  period: { type: string }
+                  total: { type: number }
+      example:
+        from: '2025-01-01'
+        to: '2025-12-31'
+        groupBy: year
+        total: 102847640.34
+        bar:
+          total: 13448640.34
+          quantity: 179958
+          byCategory:
+            - { category: Cocktail, total: 7104755.21, quantity: 62077, share: 0.5283 }
+            - { category: Kaffe, total: 6343885.13, quantity: 117881, share: 0.4717 }
+          byPeriod:
+            [
+              {
+                period: '2025',
+                total: 13448640.34,
+                categories: [{ category: Cocktail, total: 7104755.21 }, { category: Kaffe, total: 6343885.13 }],
+              },
+            ]
+          topDrinks: [{ drink: Mojito, category: Cocktail, quantity: 3350, total: 476973 }]
+        rooms: { total: 89399000, nights: 54700, byPeriod: [{ period: '2025', total: 89399000 }] }
+
+    PriceList:
+      type: object
+      required: [seasons, roomTypes]
+      properties:
+        seasons:
+          type: array
+          description: Ordered by id
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+        roomTypes:
+          type: array
+          description: Ordered by id
+          items:
+            type: object
+            required: [id, name, prices]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              prices:
+                type: array
+                description: One entry per season that has a price
+                items:
+                  type: object
+                  required: [seasonId, price]
+                  properties:
+                    seasonId: { type: integer }
+                    price: { type: number }
+
+    PriceInput:
+      type: object
+      additionalProperties: false
+      required: [price]
+      properties:
+        price:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          # No multipleOf 0.01: the validator divides in floating point and rejects e.g. 19.99
+          description: DKK with at most 2 decimals; more decimals are cut to whole øre
+      example: { price: 3600 }
 
     RoomNight:
       type: object
@@ -1135,6 +1600,8 @@ components:
                 - PRICE_NOT_CONFIGURED
                 - BOOKING_NOT_IN_HOUSE
                 - BOOKING_NOT_DEPARTED
+                - INVALID_STATUS
+                - WRONG_PASSWORD
                 - INTERNAL_ERROR
             message: { type: string, description: 'Danish, shown to the user as-is' }
             field: { type: string, description: 'Input field the error refers to, if any' }
@@ -1184,7 +1651,7 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: { code: ROOM_TYPE_FULLY_BOOKED, message: Ingen ledige værelser af typen Suite i perioden } }
     BusinessRule:
-      description: 'A business rule was broken (CAPACITY_EXCEEDED, PRICE_NOT_CONFIGURED, BOOKING_NOT_IN_HOUSE, BOOKING_NOT_DEPARTED)'
+      description: 'A business rule was broken (CAPACITY_EXCEEDED, PRICE_NOT_CONFIGURED, BOOKING_NOT_IN_HOUSE, BOOKING_NOT_DEPARTED, INVALID_STATUS, WRONG_PASSWORD)'
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1218,4 +1685,14 @@ components:
                       message: Tilfredshed kan først registreres på afrejsedagen,
                       field: score,
                     },
+                }
+            invalidStatus:
+              summary: Check-in on a booking that does not arrive today (005 FR-003)
+              value: { error: { code: INVALID_STATUS, message: Gæsten ankommer ikke i dag } }
+            wrongPassword:
+              summary: Wrong current password (005 FR-019)
+              value:
+                {
+                  error:
+                    { code: WRONG_PASSWORD, message: Den nuværende adgangskode er forkert, field: currentPassword },
                 }

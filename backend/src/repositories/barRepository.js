@@ -1,18 +1,19 @@
 import { pool } from '../db.js'
 import { toKr, toOre } from '../money.js'
 
-// sold_at comes from the database's DEFAULT CURRENT_TIMESTAMP (TZ=Europe/Copenhagen)
-export async function insertSale({ drinkId, quantity, unitPriceOre, bookingId }) {
-  const [result] = await pool.execute(
+// sold_at comes from the database's DEFAULT CURRENT_TIMESTAMP (TZ=Europe/Copenhagen).
+// Takes a connection, so all lines of an order are inserted in one transaction (005 FR-012)
+export async function insertSale(conn, { drinkId, quantity, unitPriceOre, bookingId }) {
+  const [result] = await conn.execute(
     'INSERT INTO bar_sales (drink_id, quantity, unit_price, booking_id) VALUES (?, ?, ?, ?)',
     [drinkId, quantity, toKr(unitPriceOre), bookingId],
   )
   return result.insertId
 }
 
-function where({ id, date, bookingId }) {
+function where({ ids, date, bookingId }) {
   const conditions = [
-    [id, 's.id = ?'],
+    [ids, `s.id IN (${ids?.map(() => '?').join(', ')})`, ids],
     // A range instead of DATE(sold_at) so the index on sold_at is used
     [date, 's.sold_at >= ? AND s.sold_at < DATE_ADD(?, INTERVAL 1 DAY)', [date, date]],
     [bookingId, 's.booking_id = ?'],

@@ -10,18 +10,23 @@ import * as barRepo from './repositories/barRepository.js'
 import * as bookingRepo from './repositories/bookingRepository.js'
 import * as pricingRepo from './repositories/pricingRepository.js'
 import * as referenceRepo from './repositories/referenceRepository.js'
+import * as revenueRepo from './repositories/revenueRepository.js'
 import * as roomRepo from './repositories/roomRepository.js'
 import * as userRepo from './repositories/userRepository.js'
+import { createAdminService } from './services/adminService.js'
 import { createAnalyticsService } from './services/analyticsService.js'
 import { createAuthService } from './services/authService.js'
 import { createBarService } from './services/barService.js'
 import { createBookingService } from './services/bookingService.js'
 import { createReceptionService } from './services/receptionService.js'
+import { createRevenueService } from './services/revenueService.js'
+import { adminRouter } from './routes/admin.js'
 import { analyticsRouter } from './routes/analytics.js'
 import { authRouter } from './routes/auth.js'
 import { barSalesRouter } from './routes/barSales.js'
 import { bookingsRouter } from './routes/bookings.js'
 import { receptionRouter } from './routes/reception.js'
+import { revenueRouter } from './routes/revenue.js'
 import { referenceDataRouter } from './routes/referenceData.js'
 
 // Composition root: the only place services are wired to the real repositories
@@ -30,13 +35,16 @@ const bookingService = createBookingService({
   bookingRepo,
   roomRepo,
   pricingRepo,
+  barRepo,
   referenceRepo,
   withTransaction,
   today,
 })
-const barService = createBarService({ barRepo, referenceRepo, bookingRepo, today })
+const barService = createBarService({ barRepo, referenceRepo, bookingRepo, withTransaction, today })
 const analyticsService = createAnalyticsService({ analyticsRepo })
 const receptionService = createReceptionService({ roomRepo, bookingRepo, barRepo, today })
+const revenueService = createRevenueService({ revenueRepo })
+const adminService = createAdminService({ pricingRepo, referenceRepo, roomRepo })
 
 const app = express()
 app.set('trust proxy', 1)
@@ -70,6 +78,8 @@ app.use(
   barSalesRouter(barService),
   analyticsRouter(analyticsService),
   receptionRouter(receptionService),
+  revenueRouter(revenueService),
+  adminRouter(adminService),
 )
 app.use(errorHandler)
 

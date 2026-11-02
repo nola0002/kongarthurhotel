@@ -94,16 +94,54 @@ describe('API', { skip: !process.env.DB_HOST && 'needs MySQL: run with docker co
     assert.equal(booking.totalPrice, 1000) // 2 nights × 500
   })
 
-  test('FR-001: total and totalPrice count every match, not only the first `limit`', async () => {
+  test('FR-001: total and totalPrice count every match, not only the page', async () => {
     const guest = { ...stay('2027-09-10', '2027-09-12'), firstName: 'Limit', familyName: 'Testesen' }
     await create(guest)
     await create(guest)
-    const res = await authed('/bookings?q=Limit%20Testesen&limit=1')
+    const res = await authed('/bookings?q=Limit%20Testesen&pageSize=1')
     const { total, totalPrice, counts, items } = await res.json()
     assert.equal(items.length, 1)
     assert.equal(total, 2)
     assert.equal(totalPrice, 2000) // 2 bookings × 2 nights × 500
     assert.equal(counts.all, 2)
+  })
+
+  test('005 FR-005, FR-006: sorting covers every match and a page after the last gives the last page', async () => {
+    // 1, 2 and 3 nights at 500 = 500, 1000 and 1500 kr; by price descending, page 2 of size 2 holds only the 500
+    const guest = { firstName: 'Side', familyName: 'Testesen' }
+    for (const [checkIn, checkOut] of [
+      ['2029-01-10', '2029-01-11'],
+      ['2029-01-10', '2029-01-12'],
+      ['2029-01-13', '2029-01-16'],
+    ]) {
+      await create({ ...stay(checkIn, checkOut), ...guest })
+    }
+    const res = await authed('/bookings?q=Side%20Testesen&pageSize=2&page=5&sort=totalPrice&order=desc')
+    assert.equal(res.status, 200)
+    const { page, pageCount, total, items } = await res.json()
+    assert.deepEqual([page, pageCount, total], [2, 2, 3])
+    assert.deepEqual(
+      items.map((item) => item.totalPrice),
+      [500],
+    )
+  })
+
+  test('005 R4: a sort outside the whitelist is 400 on sort', async () => {
+    const res = await authed('/bookings?sort=id%3B%20DROP%20TABLE%20bookings')
+    assert.equal(res.status, 400)
+    assert.equal((await res.json()).error.field, 'sort')
+  })
+
+  test('005 FR-016: a number in q finds the booking id and the room number', async () => {
+    const booking = await (await create(stay('2029-02-10', '2029-02-12'))).json()
+    const byId = await (await authed(`/bookings?q=${booking.id}`)).json()
+    assert.ok(byId.items.some((item) => item.id === booking.id))
+    const period = 'from=2029-02-10&to=2029-02-10'
+    const byRoom = await (await authed(`/bookings?q=${booking.room.number}&${period}`)).json()
+    assert.deepEqual(
+      byRoom.items.map((item) => item.id),
+      [booking.id],
+    )
   })
 
   test('004 FR-007: search matches first name, family name and "first family"', async () => {
@@ -345,6 +383,49 @@ describe('API', { skip: !process.env.DB_HOST && 'needs MySQL: run with docker co
     const res = await score(id, { score: 4 })
     assert.equal(res.status, 200)
     assert.equal((await res.json()).satisfactionScore, 4)
+  })
+
+  const post = (id, action, headers) => authed(`/bookings/${id}/${action}`, { method: 'POST', headers })
+
+  test('005 FR-003: check-in today is saved once, a second check-in is 422 INVALID_STATUS', async () => {
+    const { id } = await (await create(stay(today(), addDays(today(), 1)))).json()
+    const res = await post(id, 'check-in')
+    assert.equal(res.status, 200)
+    const booking = await res.json()
+    assert.equal(booking.status, 'in_house')
+    assert.match(booking.checkedInAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)
+    const again = await post(id, 'check-in')
+    assert.equal(again.status, 422)
+    assert.equal((await again.json()).error.code, 'INVALID_STATUS')
+  })
+
+  test('005 FR-003: check-out on the departure day gives checked_out', async () => {
+    const { id } = await (await create(stay(addDays(today(), -1), today()))).json()
+    const res = await post(id, 'check-out')
+    assert.equal(res.status, 200)
+    assert.equal((await res.json()).status, 'checked_out')
+  })
+
+  test('005 FR-021: check-in needs a session; the booking system key is 401', async () => {
+    const { id } = await (await create(stay('2029-03-10', '2029-03-12'))).json()
+    const res = await call(`/bookings/${id}/check-in`, { method: 'POST', headers: { 'X-API-Key': API_KEY } })
+    assert.equal(res.status, 401)
+  })
+
+  test('005 FR-008, FR-009: the folio has a line per night summing to the price, and the bill', async () => {
+    const { id } = await (await create(stay('2029-04-10', '2029-04-13'))).json()
+    const res = await authed(`/bookings/${id}/folio`)
+    assert.equal(res.status, 200)
+    const { nights, bill } = await res.json()
+    assert.deepEqual(
+      nights.map((night) => [night.date, night.season, night.price]),
+      [
+        ['2029-04-10', 'Helår', 500],
+        ['2029-04-11', 'Helår', 500],
+        ['2029-04-12', 'Helår', 500],
+      ],
+    )
+    assert.deepEqual(bill, { stay: 1500, bar: 0, total: 1500 })
   })
 
   // Only status and shape are checked, so the tests do not depend on bookings made by other tests

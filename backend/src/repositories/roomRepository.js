@@ -62,10 +62,11 @@ export async function listStays(from, to) {
   const [rows] = await pool.execute(
     `SELECT b.id AS bookingId, b.room_id AS roomId, r.room_type_id AS roomTypeId,
        b.first_name AS firstName, b.family_name AS familyName,
-       b.check_in AS checkIn, b.check_out AS checkOut, b.guest_count AS guestCount
+       b.check_in AS checkIn, b.check_out AS checkOut, b.guest_count AS guestCount,
+       b.checked_in_at AS checkedInAt, b.checked_out_at AS checkedOutAt, b.total_price AS totalPrice
      FROM bookings b JOIN rooms r ON r.id = b.room_id
      WHERE ${OVERLAPS}`,
     overlapParams(from, to),
   )
-  return rows
+  return rows.map(({ totalPrice, ...row }) => ({ ...row, totalPriceOre: toOre(totalPrice) }))
 }

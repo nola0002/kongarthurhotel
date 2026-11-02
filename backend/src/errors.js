@@ -7,6 +7,8 @@ const STATUS = {
   PRICE_NOT_CONFIGURED: 422,
   BOOKING_NOT_IN_HOUSE: 422,
   BOOKING_NOT_DEPARTED: 422,
+  INVALID_STATUS: 422,
+  WRONG_PASSWORD: 422,
 }
 
 const FIELD_LABELS = {
@@ -22,7 +24,6 @@ const FIELD_LABELS = {
   bookingId: 'Booking',
   date: 'Dato',
   view: 'Visning',
-  limit: 'Antal rækker',
   q: 'Søgning',
   id: 'Id',
   excludeBookingId: 'Booking',
@@ -31,6 +32,16 @@ const FIELD_LABELS = {
   from: 'Fra',
   days: 'Antal dage',
   score: 'Tilfredshed',
+  page: 'Side',
+  pageSize: 'Antal pr. side',
+  sort: 'Sortering',
+  order: 'Rækkefølge',
+  to: 'Til',
+  groupBy: 'Gruppering',
+  items: 'Ordrelinjer',
+  price: 'Pris',
+  currentPassword: 'Nuværende adgangskode',
+  newPassword: 'Ny adgangskode',
 }
 
 export class AppError extends Error {

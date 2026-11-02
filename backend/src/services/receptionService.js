@@ -1,5 +1,5 @@
 import { toKr } from '../money.js'
-import { deriveStatus, isInHouseOn, toApi as toApiBooking } from './bookingService.js'
+import { deriveStatus, isInHouseOn, nights, toApi as toApiBooking } from './bookingService.js'
 import { addDays, eachNight } from './pricing.js'
 
 // R4: one formula for the overview and the plan, so the two screens can never disagree.
@@ -17,6 +17,25 @@ function roomTypesWithFree(rooms, stays, dates) {
   })
 }
 
+// 005 FR-001, FR-002: the four tiles. "remaining" follows the status, so it counts down as guests are checked in/out.
+// `x && …` gives 0 instead of NaN for an empty hotel or an empty night.
+function kpis({ rooms, inHouse, arrivals, departures }) {
+  const nightlyRatesOre = inHouse.map((stay) => stay.totalPriceOre / nights(stay.checkIn, stay.checkOut))
+  const totalRatesOre = nightlyRatesOre.reduce((a, b) => a + b, 0)
+  return {
+    occupancy: { occupied: inHouse.length, total: rooms.length, rate: rooms.length && inHouse.length / rooms.length },
+    arrivals: {
+      remaining: arrivals.filter((booking) => ['upcoming', 'arriving'].includes(booking.status)).length,
+      total: arrivals.length,
+    },
+    departures: {
+      remaining: departures.filter((booking) => !['checked_out', 'departed'].includes(booking.status)).length,
+      total: departures.length,
+    },
+    averageRate: toKr(inHouse.length && Math.round(totalRatesOre / inHouse.length)),
+  }
+}
+
 export function createReceptionService({ roomRepo, bookingRepo, barRepo, today }) {
   return {
     // FR-002 (003): every count is computed here, so React only shows numbers (FR-017)
@@ -32,10 +51,13 @@ export function createReceptionService({ roomRepo, bookingRepo, barRepo, today }
       const inHouse = stays.filter((stay) => isInHouseOn(stay, date))
       // Status stays relative to today, also when another date is shown (001)
       const day = today()
+      const arrivalsApi = arrivals.map((row) => toApiBooking(row, day))
+      const departuresApi = departures.map((row) => toApiBooking(row, day))
       return {
         date,
-        arrivals: arrivals.rows.map((row) => toApiBooking(row, day)),
-        departures: departures.rows.map((row) => toApiBooking(row, day)),
+        kpis: kpis({ rooms, inHouse, arrivals: arrivalsApi, departures: departuresApi }),
+        arrivals: arrivalsApi,
+        departures: departuresApi,
         inHouse: { bookings: inHouse.length, guests: inHouse.reduce((total, stay) => total + stay.guestCount, 0) },
         rooms: roomTypesWithFree(rooms, stays, [date]).map((type) => ({
           roomTypeId: type.id,
@@ -59,7 +81,10 @@ export function createReceptionService({ roomRepo, bookingRepo, barRepo, today }
         to,
         dates,
         roomTypes: roomTypesWithFree(rooms, stays, dates),
-        stays: stays.map(({ roomTypeId, ...stay }) => ({ ...stay, status: deriveStatus(stay, day) })),
+        stays: stays.map(({ roomTypeId, checkedInAt, checkedOutAt, totalPriceOre, ...stay }) => ({
+          ...stay,
+          status: deriveStatus({ ...stay, checkedInAt, checkedOutAt }, day),
+        })),
       }
     },
   }

@@ -63,6 +63,9 @@ CREATE TABLE bookings (
   source ENUM('backoffice', 'booking_system') NOT NULL DEFAULT 'backoffice',
   -- NULL = not registered; set at check-out (003 FR-011)
   satisfaction_score TINYINT NULL,
+  -- NULL = not registered. Only today's arrivals and departures are registered; earlier stays follow the dates (005 FR-003)
+  checked_in_at DATETIME NULL,
+  checked_out_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (CHAR_LENGTH(TRIM(first_name)) > 0),
   CHECK (CHAR_LENGTH(TRIM(family_name)) > 0),

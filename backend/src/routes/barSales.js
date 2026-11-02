@@ -7,4 +7,7 @@ export function barSalesRouter(barService) {
     .post('/bar-sales', requireSession, async (req, res) =>
       res.status(201).json(await barService.registerSale(req.body)),
     )
+    .post('/bar-sales/orders', requireSession, async (req, res) =>
+      res.status(201).json(await barService.registerOrder(req.body)),
+    )
 }

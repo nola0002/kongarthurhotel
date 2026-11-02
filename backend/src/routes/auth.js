@@ -14,4 +14,8 @@ export function authRouter(authService) {
       res.sendStatus(204)
     })
     .get('/auth/me', requireSession, (req, res) => res.json({ username: req.session.username }))
+    .put('/auth/password', requireSession, async (req, res) => {
+      await authService.changePassword(req.session.userId, req.body.currentPassword, req.body.newPassword)
+      res.sendStatus(204)
+    })
 }

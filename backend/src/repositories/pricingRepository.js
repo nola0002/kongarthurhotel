@@ -1,4 +1,5 @@
-import { toOre } from '../money.js'
+import { pool } from '../db.js'
+import { toKr, toOre } from '../money.js'
 
 export async function getPeriods(conn, fromDate, toDate) {
   const [rows] = await conn.execute(
@@ -17,4 +18,29 @@ export async function getPrices(conn, roomTypeId) {
     [roomTypeId],
   )
   return new Map(rows.map((row) => [row.seasonId, toOre(row.price)]))
+}
+
+export async function listSeasons() {
+  const [rows] = await pool.execute('SELECT id, name FROM seasons ORDER BY id')
+  return rows
+}
+
+export async function seasonExists(id) {
+  const [rows] = await pool.execute('SELECT 1 FROM seasons WHERE id = ?', [id])
+  return rows.length > 0
+}
+
+export async function listPrices() {
+  const [rows] = await pool.execute(
+    'SELECT room_type_id AS roomTypeId, season_id AS seasonId, price_per_night AS price FROM room_prices',
+  )
+  return rows.map(({ price, ...row }) => ({ ...row, priceOre: toOre(price) }))
+}
+
+export async function upsertPrice(roomTypeId, seasonId, priceOre) {
+  await pool.execute(
+    `INSERT INTO room_prices (room_type_id, season_id, price_per_night) VALUES (?, ?, ?) AS new
+     ON DUPLICATE KEY UPDATE price_per_night = new.price_per_night`,
+    [roomTypeId, seasonId, toKr(priceOre)],
+  )
 }

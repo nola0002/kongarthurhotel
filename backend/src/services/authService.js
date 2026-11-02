@@ -34,6 +34,15 @@ export function createAuthService({ userRepo }) {
       return { id: user.id, username: user.username }
     },
 
+    // The current password is required, so an unlocked screen is not enough to take over the account (005 FR-019)
+    async changePassword(userId, currentPassword, newPassword) {
+      const user = await userRepo.findById(userId)
+      if (!(await verifyPassword(currentPassword, user?.passwordHash))) {
+        throw new AppError('WRONG_PASSWORD', 'Den nuværende adgangskode er forkert', { field: 'currentPassword' })
+      }
+      await userRepo.updatePasswordHash(userId, await hashPassword(newPassword))
+    },
+
     // The account is not in the seed, so no password hash ever lands in git (R6)
     async ensureSeedUser() {
       if ((await userRepo.countUsers()) > 0) return

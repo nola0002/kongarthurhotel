@@ -3,9 +3,9 @@ import { nights } from './bookingService.js'
 import { eachNight, periodOn } from './pricing.js'
 
 const yearOf = (date) => Number(date.slice(0, 4))
-const sum = (values) => values.reduce((a, b) => a + b, 0)
+export const sum = (values) => values.reduce((a, b) => a + b, 0)
 // Empty periods give 0 instead of NaN, so Tableau shows a number rather than a gap
-const ratio = (numerator, denominator) => (denominator === 0 ? 0 : numerator / denominator)
+export const ratio = (numerator, denominator) => (denominator === 0 ? 0 : numerator / denominator)
 
 // FR-015: the frozen total_price (FR-009) is split over the nights in proportion to each night's current season
 // price. Rounding down per night and putting the remainder on the last night makes the nights sum to the total exactly.

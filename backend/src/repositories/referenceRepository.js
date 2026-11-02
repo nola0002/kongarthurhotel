@@ -1,5 +1,5 @@
 import { pool } from '../db.js'
-import { toOre } from '../money.js'
+import { toKr, toOre } from '../money.js'
 
 export async function listCountries() {
   const [rows] = await pool.execute('SELECT code, name FROM countries ORDER BY name')
@@ -25,4 +25,8 @@ export async function listDrinks() {
 export async function getDrink(id) {
   const [rows] = await pool.execute(`${SELECT_DRINK} WHERE d.id = ?`, [id])
   return rows[0] ? toDrink(rows[0]) : null
+}
+
+export async function updateDrinkPrice(id, priceOre) {
+  await pool.execute('UPDATE drinks SET price = ? WHERE id = ?', [toKr(priceOre), id])
 }
