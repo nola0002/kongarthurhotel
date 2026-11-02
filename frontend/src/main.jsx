@@ -10,6 +10,8 @@ import RoomPlan, { loader as roomPlanLoader } from './pages/RoomPlan.jsx'
 import Bookings, { loader as bookingsLoader } from './pages/Bookings.jsx'
 import BookingDetail, { loader as bookingDetailLoader } from './pages/BookingDetail.jsx'
 import BarSales, { loader as barSalesLoader } from './pages/BarSales.jsx'
+import Revenue, { loader as revenueLoader } from './pages/Revenue.jsx'
+import Profile, { loader as profileLoader } from './pages/Profile.jsx'
 
 // Every loader goes through here, so a missing or expired session leads to login, not an error page (FR-015)
 const requireSession = (load) => async (args) => {
@@ -28,7 +30,7 @@ function RouteError() {
     <EmptyState
       title="Siden kunne ikke vises."
       body={error?.message}
-      action={<ButtonLink to="/bookinger">Tilbage til bookinger</ButtonLink>}
+      action={<ButtonLink to="/oversigt">Tilbage til oversigten</ButtonLink>}
     />
   )
 }
@@ -52,6 +54,8 @@ const router = createBrowserRouter([
           { path: 'bookinger', element: <Bookings />, loader: requireSession(bookingsLoader) },
           { path: 'bookinger/:id', element: <BookingDetail />, loader: requireSession(bookingDetailLoader) },
           { path: 'barsalg', element: <BarSales />, loader: requireSession(barSalesLoader) },
+          { path: 'omsaetning', element: <Revenue />, loader: requireSession(revenueLoader) },
+          { path: 'profil', element: <Profile />, loader: requireSession(profileLoader) },
         ],
       },
     ],

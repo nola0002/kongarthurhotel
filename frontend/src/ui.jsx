@@ -26,6 +26,9 @@ export function ButtonLink({ variant, size, className, ...props }) {
   return <Link className={cx(buttonClass(variant, size), className)} {...props} />
 }
 
+// The modifier for Cmd/Ctrl+K as the user's keyboard shows it
+export const modKey = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
+
 export function Kbd({ children }) {
   return (
     <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-line-strong bg-surface px-1 font-sans text-xs text-ink-3">
@@ -151,6 +154,13 @@ export const STATUS = {
     pill: 'bg-hold-soft text-hold-ink',
   },
   in_house: { label: 'I huset', marker: 'bg-ok', pill: 'bg-ok-soft text-ok-ink' },
+  // Half-filled ring: still in the house, but check-out is due today (005)
+  departing: {
+    label: 'Rejser i dag',
+    marker: 'ring-[1.5px] ring-inset ring-hold bg-linear-to-r from-hold from-50% to-transparent to-50%',
+    pill: 'bg-hold-soft text-hold-ink',
+  },
+  checked_out: { label: 'Tjekket ud', marker: 'bg-ink-3', pill: 'bg-sunken text-ink-2' },
   departed: { label: 'Afrejst', marker: 'bg-ink-4', pill: 'bg-sunken text-ink-3' },
 }
 

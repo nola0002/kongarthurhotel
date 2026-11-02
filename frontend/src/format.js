@@ -1,6 +1,14 @@
 // All number and date formatting lives here, so the UI formats everything the same way.
 const krFmt = new Intl.NumberFormat('da-DK', { style: 'currency', currency: 'DKK', maximumFractionDigits: 0 })
+const krExactFmt = new Intl.NumberFormat('da-DK', { style: 'currency', currency: 'DKK' })
+const krShortFmt = new Intl.NumberFormat('da-DK', {
+  style: 'currency',
+  currency: 'DKK',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
 const numFmt = new Intl.NumberFormat('da-DK')
+const pctFmt = new Intl.NumberFormat('da-DK', { style: 'percent', maximumFractionDigits: 1 })
 const rangeFmt = new Intl.DateTimeFormat('da-DK', { day: 'numeric', month: 'short' })
 const rangeYearFmt = new Intl.DateTimeFormat('da-DK', { day: 'numeric', month: 'short', year: 'numeric' })
 
@@ -10,7 +18,13 @@ export const today = () => new Date().toLocaleDateString('sv-SE')
 const thisYear = (iso) => iso.slice(0, 4) === today().slice(0, 4)
 
 export const kr = (n) => krFmt.format(n)
+// With øre, where whole kroner would hide a difference: drink prices (72,47 kr.) and revenue (SC-004)
+export const krExact = (n) => krExactFmt.format(n)
+// Large totals that must fit a tile: "13,4 mio. kr."; show krExact next to it
+export const krShort = (n) => (Math.abs(n) < 1e6 ? kr(n) : krShortFmt.format(n))
 export const num = (n) => numFmt.format(n)
+// Fractions 0–1 from the API: "84,1 %"
+export const pct = (n) => pctFmt.format(n)
 
 // Noon, so a daylight saving shift can never move the date
 export const toDate = (iso) => new Date(iso + 'T12:00:00')

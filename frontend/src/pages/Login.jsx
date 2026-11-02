@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { EyeIcon, EyeSlashIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { api } from '../api.js'
-import { Button, ErrorBanner, inputClass, labelClass } from '../ui.jsx'
+import { Button, ErrorBanner, Kbd, inputClass, labelClass, modKey } from '../ui.jsx'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -27,55 +27,74 @@ export default function Login() {
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-paper px-4">
-      <form onSubmit={onSubmit} className="w-full max-w-[400px] space-y-5">
-        <div>
-          <p className="text-xl font-semibold tracking-[-0.02em]">Kong Arthur</p>
-          <h1 className="mt-6 text-3xl font-semibold tracking-[-0.03em]">Log ind</h1>
-        </div>
-        <ErrorBanner error={error} />
-        <div>
-          <label htmlFor="username" className={labelClass}>
-            Brugernavn
-          </label>
-          <input id="username" name="username" required autoComplete="username" autoFocus className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="password" className={labelClass}>
-            Adgangskode
-          </label>
-          <div className="relative">
-            <input
-              id="password"
-              name="password"
-              type={showPassword ? 'text' : 'password'}
-              required
-              autoComplete="current-password"
-              className={inputClass + ' pr-11'}
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute top-1.5 right-1.5 px-2"
-              aria-label={showPassword ? 'Skjul adgangskode' : 'Vis adgangskode'}
-              aria-pressed={showPassword}
-              onClick={() => setShowPassword((s) => !s)}
-            >
-              {showPassword ? <EyeSlashIcon size={17} /> : <EyeIcon size={17} />}
-            </Button>
+    <div className="grid min-h-dvh bg-paper lg:grid-cols-[1fr_1.15fr]">
+      <div className="grid place-items-center px-4 py-10">
+        <form onSubmit={onSubmit} className="w-full max-w-[400px] space-y-5">
+          <div>
+            <p className="text-xl font-semibold tracking-[-0.02em]">Kong Arthur</p>
+            <h1 className="mt-6 text-3xl font-semibold tracking-[-0.03em]">Log ind</h1>
+            <p className="mt-2 text-ink-2">Back office til receptionen.</p>
           </div>
+          <ErrorBanner error={error} />
+          <div>
+            <label htmlFor="username" className={labelClass}>
+              Brugernavn
+            </label>
+            <input id="username" name="username" required autoComplete="username" autoFocus className={inputClass} />
+          </div>
+          <div>
+            <label htmlFor="password" className={labelClass}>
+              Adgangskode
+            </label>
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                className={inputClass + ' pr-11'}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute top-1.5 right-1.5 px-2"
+                aria-label={showPassword ? 'Skjul adgangskode' : 'Vis adgangskode'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((s) => !s)}
+              >
+                {showPassword ? <EyeSlashIcon size={17} /> : <EyeIcon size={17} />}
+              </Button>
+            </div>
+          </div>
+          <Button type="submit" variant="primary" className="w-full" disabled={pending}>
+            {pending ? (
+              <>
+                <SpinnerGapIcon size={16} className="animate-spin" />
+                Logger ind…
+              </>
+            ) : (
+              'Log ind'
+            )}
+          </Button>
+          <p className="flex flex-wrap items-center gap-1.5 text-sm text-ink-3">
+            Tryk <Kbd>{modKey}</Kbd>
+            <Kbd>K</Kbd> for at søge, når du er logget ind.
+          </p>
+        </form>
+      </div>
+
+      <div className="relative m-2 hidden overflow-hidden rounded-3xl shadow-canvas lg:block">
+        <img
+          src="/kong-arthur-facade.webp"
+          alt="Hotel Kong Arthurs facade"
+          className="absolute inset-0 size-full object-cover"
+        />
+        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink/75 via-ink/30 to-transparent px-10 pt-32 pb-10 text-white">
+          <p className="text-2xl font-semibold tracking-[-0.02em]">Hotel Kong Arthur · København</p>
+          <p className="mt-1 text-white/80">Ved søerne i hjertet af København.</p>
         </div>
-        <Button type="submit" variant="primary" className="w-full" disabled={pending}>
-          {pending ? (
-            <>
-              <SpinnerGapIcon size={16} className="animate-spin" />
-              Logger ind…
-            </>
-          ) : (
-            'Log ind'
-          )}
-        </Button>
-      </form>
+      </div>
     </div>
   )
 }
