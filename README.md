@@ -4,8 +4,9 @@ Back office til receptionen (bookinger og barsalg) og data til ledelsens Tableau
 Stack: Docker Compose, MySQL 8.4, Node.js 24 + Express 5 og React 19 + Tailwind 4.
 
 Back office (feature [001](specs/001-backoffice-bookinger/spec.md)), receptionsoverblik med
-belægningsplan og kundetilfredshed ([003](specs/003-receptionsoverblik/spec.md)) og opgavens data
-([004](specs/004-opgavedata/spec.md)) er bygget. Til Tableau-dashboardet
+belægningsplan og kundetilfredshed ([003](specs/003-receptionsoverblik/spec.md)), opgavens data
+([004](specs/004-opgavedata/spec.md)) og receptionens arbejdsværktøj med ind-/udtjekning, folio,
+kasse, omsætning og ⌘K ([005](specs/005-enterprise-backoffice/spec.md)) er bygget. Til Tableau-dashboardet
 ([002](specs/002-bi-dashboard/spec.md)) er REST-API'et med stjerneskemaet bygget. Workbooken bygges
 efter [`docs/tableau-guide.md`](docs/tableau-guide.md).
 
@@ -172,6 +173,22 @@ Dashboardet er én fil, `tableau/kong-arthur.twbx`, med én datakilde og kræver
 2024.2.1+ med REST API Connector. Byggetrinene står i
 [`docs/tableau-guide.md`](docs/tableau-guide.md), og tallene tjekkes med
 [`quickstart.md`](specs/002-bi-dashboard/quickstart.md) Del 2.
+
+## Back office
+
+| Side | Indhold |
+|---|---|
+| Oversigt | Dagens drift: belægning i nat, ankomster og afrejser tilbage, gns. pris pr. nat, ind- og udtjekning |
+| Belægningsplan | Værelser × dage |
+| Bookinger | Pagineret liste med sortering og filtre (over 200.000 bookinger) |
+| Booking | Folio: nætter med sæson og pris, barsalg på værelset, regning og handlinger |
+| Kasse | Barsalg med ordre, betalt direkte eller på værelset |
+| Omsætning | Barens omsætning pr. dag, måned eller år, kategorier og top 5, og værelsesomsætning |
+| Profil | Log ud, skift adgangskode, prisliste og drinkpriser |
+
+Tryk **⌘K** (Ctrl+K) for at søge en gæst, et bookingnummer eller et værelse og hoppe til sider.
+Skærmene er beskrevet i [`docs/design/skaerme.md`](docs/design/skaerme.md) og kravene i
+[`specs/005-enterprise-backoffice/`](specs/005-enterprise-backoffice/).
 
 ## Daglig brug
 

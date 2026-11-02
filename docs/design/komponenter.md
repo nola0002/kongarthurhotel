@@ -50,7 +50,11 @@ en markør (`size-2.5 rounded-[3px]`) og en label.
 | `upcoming` | Kommende | `ring-[1.5px] ring-inset ring-ink-3` (ring) | `bg-sunken text-ink` |
 | `arriving` | Ankommer i dag | `ring-[1.5px] ring-inset ring-hold` (ring) | `bg-hold-soft text-hold-ink` |
 | `in_house` | I huset | `bg-ok` (fyldt) | `bg-ok-soft text-ok-ink` |
+| `departing` | Rejser i dag | ring `ring-hold` med venstre halvdel fyldt | `bg-hold-soft text-hold-ink` |
+| `checked_out` | Tjekket ud | `bg-ink-3` (fyldt) | `bg-sunken text-ink-2` |
 | `departed` | Afrejst | `bg-ink-4` (fyldt) | `bg-sunken text-ink-3` |
+
+Reglerne for de seks statusser står i `specs/005-enterprise-backoffice/data-model.md`.
 
 `StatusMarker({ status })` er markøren alene (`size-2.5 shrink-0 rounded-[3px]`, `aria-hidden`).
 `StatusBadge` og belægningsplanens bjælker og forklaring bruger den. Tabellen er eksporteret som
@@ -77,8 +81,11 @@ Kilde: `frontend/src/format.js`.
 
 | Funktion | Eksempel |
 |---|---|
-| `kr(n)` | `1800` → "1.800 kr." |
+| `kr(n)` | `1800` → "1.800 kr." (hele kroner) |
+| `krExact(n)` | `72.47` → "72,47 kr." (drinkpriser, kassen og omsætning) |
+| `krShort(n)` | `13448640.34` → "13,4 mio. kr." (store beløb i en flise; vis `krExact` ved siden af) |
 | `num(n)` | `1234` → "1.234" |
+| `pct(n)` | `0.8411` → "84,1 %" (andele 0–1 fra API'et) |
 | `toDate(iso)` | `new Date(iso + 'T12:00:00')`. Klokken 12, så sommertid aldrig flytter datoen |
 | `date(iso, opts?)` | Standard `{ weekday: 'short', day: 'numeric', month: 'short' }`: "tir. 10. mar." |
 | `longDate(iso)` | "tirsdag 10. marts 2026" |
@@ -116,18 +123,38 @@ Kilde: `Shell.jsx`. Kun desktop, der er ingen mobilvisning.
 - Ramme: `grid h-dvh grid-cols-[264px_1fr] overflow-hidden`.
 - Sidebar: `flex flex-col px-4 py-5` på `paper`, oppefra:
   - Ordmærke "Kong Arthur": `text-xl font-semibold tracking-[-0.02em]`.
-  - Navigation: **Oversigt** (`/oversigt`, `House`), **Belægningsplan** (`/belaegningsplan`,
-    `CalendarDots`), **Bookinger** (`/bookinger`, `Bed`) og **Barsalg** (`/barsalg`, `Martini`).
+  - Søgeknap "Søg … ⌘K", der åbner kommandopaletten (se § Kommandopalet).
+  - Navigation i grupper med en lille gruppetitel (`NAV` i `Shell.jsx`, 005 FR-017):
+    **Reception**: Oversigt (`House`), Belægningsplan (`CalendarDots`), Bookinger (`Bed`).
+    **Bar**: Kasse (`/barsalg`, `CashRegister`). **Økonomi**: Omsætning (`/omsaetning`,
+    `ChartLineUp`). **Konto**: Profil (`/profil`, `UserCircle`).
   - Nav-punkt: `flex h-10 items-center gap-3 rounded-lg px-3`, Phosphor-ikon 20px.
   - Inaktivt punkt: `text-ink-2 hover:bg-ink/[0.04]`, ikon `text-ink-3`.
   - Aktivt punkt: `bg-ink/[0.07] font-medium text-ink`, ikon `weight="fill" text-signal`.
-  - Nederst (`mt-auto`): den indloggede konto i `text-sm text-ink-2` og en `ghost`-knap
-    "Log ud".
+  - Nederst (`mt-auto`): den indloggede konto med initial-avatar som link til `/profil`. "Log
+    ud" ligger på profilsiden.
 - Indholdskort (`<main>`): `my-2 mr-2 h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl bg-canvas shadow-canvas`. Indholdet ligger i `mx-auto max-w-[1280px] px-8 py-10`.
 - Toasten (se § Toast) bor også i `Shell.jsx`.
 - Tastaturgenvej: `N` åbner "Ny booking" og vises som `<Kbd>N</Kbd>` på knappen. Den ignoreres, når fokus er i `input`/`textarea`/`select`/`[contenteditable]` eller en åben `<dialog>`, eller når der holdes en modifier-tast.
 
 ## Opskrifter
+
+### Kommandopalet (`CommandPalette.jsx`, 005 FR-016)
+
+- Native `<dialog>`, åbnes og lukkes med ⌘K/Ctrl+K overalt (også i felter) og fra søgeknappen.
+  `useShell().openPalette` åbner den fra kode. `modKey` i `ui.jsx` viser "⌘" eller "Ctrl".
+- Søgefeltet er en combobox med `role="listbox"` og `aria-activedescendant`. Piletaster, Enter
+  og Escape. En footer viser tasterne.
+- Grupper: **Bookinger** fra `GET /bookings?q=…&sort=nearest&pageSize=8&view=all` (debounce
+  150 ms; værelse, navn, periode, type, #id og status), **Sider** fra `NAV` (matcher navn, gruppe
+  og nøgleord) og **Handlinger** ("Ny booking", "Nyt barsalg").
+
+### Paginering og sorterbare kolonner (`Pagination.jsx`)
+
+- `Pagination`: "1–50 af 233.644", første/forrige/næste/sidste som links og sidestørrelse
+  25/50/100. Siden står i URL'en (`?side=`, `?pr-side=`).
+- `SortHeader`: en knap i `<th>` med `aria-sort`. Klik skifter retning. Ændring af filter,
+  sortering eller sidestørrelse sætter siden til 1.
 
 ### Dialog (native `<dialog>`)
 

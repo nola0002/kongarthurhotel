@@ -1,7 +1,10 @@
 # Skærme og flows – Kong Arthur back office
 
 Hver skærm henviser til kravene i `specs/001-backoffice-bookinger/spec.md` (Oversigt og
-Belægningsplan til `specs/003-receptionsoverblik/spec.md`). Primitiver og
+Belægningsplan til `specs/003-receptionsoverblik/spec.md`). Feature 005
+(`specs/005-enterprise-backoffice/spec.md`) har gjort back office'et til receptionens
+arbejdsværktøj: forside med dagens drift, pagineret liste, folio, kasse, omsætning, profil og
+kommandopalet. Primitiver og
 opskrifter står i `komponenter.md`. Routes og URL-parametre er på dansk.
 
 ## Kort over appen
@@ -9,11 +12,13 @@ opskrifter står i `komponenter.md`. Routes og URL-parametre er på dansk.
 ```
 /login                         Log ind (offentlig)
 /                              → redirect til /oversigt
-/oversigt                      Dagsoverblik  (?dato=2026-03-10)
+/oversigt                      Dagens drift  (?dato=2026-03-10)
 /belaegningsplan               Belægningsplan (?fra=2026-03-10&dage=14)
-/bookinger                     Bookingliste  (?q=navn&dato=2026-03-10)
-/bookinger/:id                 Bookingdetalje (rediger, slet, barsalg på bookingen)
-/barsalg                       Registrér barsalg + dagens salg
+/bookinger                     Bookingliste  (?side=&pr-side=&sorter=&orden=&visning=&q=&type=&land=&fra=&til=)
+/bookinger/:id                 Folio: ophold, nætter, barsalg, regning og handlinger
+/barsalg                       Kasse (?booking=1042 forvælger værelset)
+/omsaetning                    Omsætning (?fra=&til=&pr=dag|maaned|aar)
+/profil                        Profil, adgangskode og administration af priser
 ```
 
 Opret og rediger booking sker i en skuffe ovenpå den aktuelle side og har ingen egen route.
@@ -23,44 +28,40 @@ til `/login?fra=<sti>`.
 
 ## Shell
 
-Kilde: `Shell.jsx`. Sidebar (ordmærke, Oversigt, Belægningsplan, Bookinger, Barsalg, konto og
-"Log ud"), indholdskort,
-toast og genvejen `N` er specificeret i [`komponenter.md` § Shell](komponenter.md#shell).
+Kilde: `Shell.jsx`. Sidebar med søgeknap, navigation i grupperne Reception, Bar, Økonomi og
+Konto og kontoen nederst, indholdskort, toast, kommandopalet (⌘K) og genvejen `N` er
+specificeret i [`komponenter.md` § Shell](komponenter.md#shell).
 
-## Log ind (FR-015)
+## Log ind (FR-015, 005 FR-018)
 
 Kilde: `pages/Login.jsx`. Siden ligger uden for `<Shell>`.
 
-- Én kolonne med formularen: `grid min-h-dvh place-items-center bg-paper`, formular
-  `w-full max-w-[400px]` med ordmærket "Kong Arthur" over titlen. Ingen produktvisning og
-  ingen data før login.
+- Fra `lg:` to kolonner (`lg:grid-cols-[1fr_1.15fr]`): formularen til venstre og hotellets
+  facadefoto (`/kong-arthur-facade.webp`, `object-cover` i et afrundet kort med en diskret
+  gradient og "Hotel Kong Arthur · København") til højre. På smalle skærme kun formularen.
 - Felter: brugernavn og adgangskode med vis/skjul-knap. Ingen SSO og ingen "glemt
   adgangskode" (uden for scope).
-- Fejl: API'ets `error.message` (én generel besked, "Forkert brugernavn eller adgangskode") som
-  `role="alert"`. Den afslører ikke, hvilket felt der var forkert.
-- Under login: knappen viser spinner og "Logger ind…". Ved succes navigeres til `fra` eller
-  `/` (Oversigt, 003 FR-001).
+- Fejl: API'ets `error.message` (én generel besked) som `role="alert"`.
+- Under login: spinner og "Logger ind…". Ved succes navigeres til `fra` eller `/`. Et hint
+  fortæller, at ⌘K søger efter login.
 
-## Oversigt (003: FR-001–FR-004, FR-012, FR-017)
+## Oversigt – dagens drift (003 FR-001–FR-004, 005 FR-001–FR-004)
 
 Kilde: `pages/Overview.jsx`. Startsiden. Ét kald: `GET /api/reception/overview?date=`. Datoen
 sendes kun, når `?dato=` står i adressen, så "i dag" er serverens dato.
 
-- `PageHeader`: titel "Oversigt", beskrivelse `longDate(date)` og
-  [`DateNav`](komponenter.md#datenav) (forrige/næste dag, "I dag" = `/oversigt`, datovælger).
-- Fire `Stat`-fliser (`grid grid-cols-4 gap-5`): Ankomster, Afrejser, I huset (`inHouse.bookings`
-  med konteksten "N gæster") og Barsalg (`kr(barSalesTotal)`).
-- `grid grid-cols-12 gap-5`:
-  - Venstre (`col-span-8`): `Tile flush` "Ankomster" og "Afrejser" efter tabel-opskriften med
-    kolonnerne Gæst (`guestName`, link), Værelse (nummer og type i `ink-3`), Nætter, Gæster og
-    Status. Hele rækken er klikbar og åbner `/bookinger/:id`. Afrejser har desuden kolonnen
-    Tilfredshed: "4 af 5", når `satisfactionScore` er sat, ellers knappen "Registrér
-    tilfredshed" (`size="sm"`), når `status` er `departed`, ellers "–". Knappen åbner
-    [`SatisfactionDialog`](komponenter.md#kundetilfredshed-satisfactiondialog).
-  - Højre (`col-span-4`): `Tile` "Ledige værelser" med én `Field` pr. type: "4 ledige af 30" og
-    "Udsolgt", når `free` er 0.
-- Tomme lister: `EmptyState` på én linje ("Ingen ankomster på datoen.").
-- React tæller ikke. Antal i `Tile count` og `Stat` er listernes længde og tallene fra API'et.
+- `PageHeader`: titel "Oversigt", `longDate(date)`, [`DateNav`](komponenter.md#datenav) og
+  primær "Ny booking" med `Kbd N`.
+- Fire `Stat`-fliser fra `kpis`: **Belægning i nat** (`pct(rate)`, "135 af 214 værelser"),
+  **Ankomster tilbage** (remaining af total), **Afrejser tilbage** og **Gns. pris pr. nat**.
+- Venstre (`col-span-8`): "Ankomster" og "Afrejser" med gæst, land, værelse, nætter, gæster,
+  status og ét næste skridt pr. række: "Tjek ind" (`arriving`), "Tjek ud" (`departing`) eller
+  "Registrér tilfredshed" (`checked_out`/`departed` uden score). Efter udtjek åbner
+  tilfredshedsdialogen med det samme. Ind-/udtjek ligger i `useStayActions()` i
+  `SatisfactionDialog.jsx`, så Oversigt og folio deler det.
+- Højre (`col-span-4`): "I huset i nat" (bookinger og gæster), "Barsalg" med beløbet og linket
+  "Åbn kassen", og "Ledige værelser" pr. type ("Udsolgt", når `free` er 0).
+- React tæller ikke. Alle tal kommer fra API'et.
 
 ## Belægningsplan (003: FR-005–FR-009, FR-017)
 
@@ -79,33 +80,22 @@ Kilde: `pages/RoomPlan.jsx`. Ét kald: `GET /api/reception/room-plan?from=&days=
 - Ophold, der fortsætter uden for perioden, har ingen afrundet kant på den side.
 - Ugyldige parametre (fx `?dage=40`) giver API'ets fejlbesked på fejlsiden.
 
-## Bookingliste (FR-001, FR-002)
+## Bookingliste (FR-001, FR-002, 005 FR-005–FR-007)
 
-Kilde: `pages/Bookings.jsx`.
+Kilde: `pages/Bookings.jsx` og `Pagination.jsx`. Der er over 200.000 bookinger, så alt sker på
+serveren: `GET /api/bookings` med side, sortering og filtre fra URL'en.
 
-- `PageHeader`: titel "Bookinger" og beskrivelse "N bookinger, M i huset i dag", hvor N og M er
-  `counts.all` og `counts.in_house` fra API-svaret. Handling: primær "Ny booking" med `Kbd N`.
-- Værktøjslinje: søgefelt (fornavn, efternavn eller "fornavn efternavn", `?q=`) og datofelt (`?dato=`, viser hvem der bor på
-  hotellet den dag). "Ryd"-knappen vises kun, når der er filtre.
-- Visnings-faner: **Kommende · I huset · Afrejst · Alle**.
-  - Fanerne er disjunkte. "I huset" inkluderer gæster, der ankommer i dag.
-  - Hver fane viser sit antal fra `counts` i API-svaret.
-  - Når der søges eller filtreres på dato, vises "Alle" som aktiv fane.
-  - Status kommer fra API'et (`booking.status`). Den afledes i backend og gemmes ikke (3NF).
-- Kolonner:
-
-  | Kolonne | Indhold |
-  |---|---|
-  | Periode | `date(checkIn)`–`date(checkOut)` og `nightsLabel(nights)` i `ink-3` |
-  | Gæst | `guestName(booking)` (fornavn og efternavn fra `format.js`, link) og `country.name` i `ink-3` |
-  | Værelse | `roomType.name` + `room.number` i `ink-3` |
-  | Gæster | `guestCount`, `tnum` |
-  | Status | [`StatusBadge`](komponenter.md#statusbadge-opholdsstatus-form-før-farve) |
-  | Kilde | Lille `sunken`-badge "Bookingsystem", kun når kilden ikke er back office |
-  | Pris | `kr(totalPrice)`, højrestillet |
-
-- `tfoot`: "I alt, `total` bookinger" og `kr(totalPrice)` fra API-svaret (se `komponenter.md`
-  § Tabel).
+- `PageHeader`: titel "Bookinger", "N bookinger, M i huset i dag" (`counts`) og primær "Ny
+  booking" med `Kbd N`.
+- Filterlinje: søgning (navn, bookingnummer eller værelse, `?q=`), værelsestype (`?type=`), land
+  (`?land=`), periode (`?fra=`/`?til=`, ophold der overlapper) og "Ryd filtre".
+- Faner **Kommende · I huset · Afrejst · Alle** med antal fra `counts`. Fanerne beholder de
+  andre filtre, men ikke søgningen, fordi API'et ignorerer visningen under søgning.
+- Kolonner: Ankomst, Afrejse og Nætter (sorterbare), Gæst (sorterbar; navn som link, `#id`, land
+  og kildebadge "Bookingsystem"), Værelse, Gæster, Status og Pris (sorterbar). Sortering via
+  [`SortHeader`](komponenter.md#paginering-og-sorterbare-kolonner-paginationjsx).
+- Under tabellen: [`Pagination`](komponenter.md#paginering-og-sorterbare-kolonner-paginationjsx).
+  `tfoot` viser `kr(totalPrice)` for alle matchende bookinger.
 - Klik på en række åbner `/bookinger/:id`.
 
 ## Ny / rediger booking (FR-003, FR-004, FR-006–FR-008, FR-014)
@@ -140,51 +130,61 @@ Skuffe fra højre. Se opskriften i `komponenter.md`. Sektioner:
   vises, og listen opdateres. Det tildelte værelse nævnes, fordi systemet vælger det
   (FR-016).
 
-## Bookingdetalje (FR-004, FR-005, FR-010a, FR-016, 003 FR-012)
+## Folio – bookingdetalje (FR-004, FR-005, 003 FR-012, 005 FR-008–FR-010)
 
-Kilde: `pages/BookingDetail.jsx` (uden faner, da én side er nok).
+Kilde: `pages/BookingDetail.jsx`. Ét kald: `GET /api/bookings/:id/folio`.
 
-- Brødkrumme: "Bookinger / #1042".
-- Header: H1 med gæstenavn, `StatusBadge` og underlinje med periode, værelse og land.
-- Handlinger til højre: `secondary` "Registrér tilfredshed" (kun når `status` er `departed`,
-  åbner [`SatisfactionDialog`](komponenter.md#kundetilfredshed-satisfactiondialog), som også
-  retter en registreret score), `secondary` "Rediger" (åbner skuffen med data) og `danger` "Slet
-  booking" (åbner bekræftelsesdialogen, se `komponenter.md` § Bekræft sletning).
-- Fliser (`grid grid-cols-12 gap-5`):
-  - **Ophold** (`Field`-liste): ankomst, afrejse, nætter (`nights`), gæster (`guestCount`),
-    værelse, tilfredshed ("4 af 5" eller "–"), kilde og oprettet.
-  - **Pris**: den *gemte* totalpris (`Stat`) og `nightsLabel(nights)` (FR-009). Der vises ingen
-    opdeling pr. sæson her, fordi den ville blive beregnet ud fra dagens priser og kunne
-    afvige fra den gemte total.
-  - **Barsalg på værelset**: tabel med tidspunkt, drink, antal og beløb, `kr(total)` fra
-    `GET /api/bar-sales?bookingId=` i bunden og knappen "Registrér salg", der er forudfyldt
-    med denne booking. Knappen vises, når `status` er `arriving` eller `in_house`.
-- Bookingen findes ikke: `EmptyState` "Bookingen findes ikke længere" og et link tilbage.
+- Header: gæstens navn, `StatusBadge` og "Booking #id · periode · type, værelse".
+- Handlinger, kun når de passer til status: "Tjek ind" (`arriving`) og "Tjek ud" (`departing`)
+  som primære, "Sælg på værelset" (→ `/barsalg?booking=:id`, når gæsten er i huset),
+  "Registrér/Ret tilfredshed" (fra afrejsedagen), "Ret" (skuffen) og "Slet booking" (bekræftelse).
+- Fliser: **Gæst** (navn, land, gæster, kilde, oprettet), **Ophold** (datoer, nætter, værelse,
+  ind- og udtjekningstid, tilfredshed) og **Regning** (ophold, bar, total).
+- **Nætter**: dato, sæson og nattens andel af den fastfrosne pris. Summen er bookingens pris.
+- **Barsalg på værelset**: tidspunkt, drink, antal og beløb med sum.
+- Alle beløb kommer fra API'et. Bookingen findes ikke: `EmptyState` og et link tilbage.
 
-## Barsalg (FR-010, FR-010a, FR-011, 003 FR-016)
+## Kasse (FR-010, FR-010a, 005 FR-011–FR-013)
 
-Kilde: `pages/BarSales.jsx`. Én enkel side, bygget af de samme primitiver.
+Kilde: `pages/BarSales.jsx`. En salgsside uden historik (historikken er på Omsætning).
 
-- `PageHeader`: titel "Barsalg" og beskrivelse "Helene Christine · lobbybaren · I dag: X kr.",
-  hvor X er `kr(total)` fra `GET /api/bar-sales`. Hun er hotellets eneste bartender, så salget
-  har ingen medarbejderkolonne.
-- Registrering (`Tile`) består af:
-  - Drink: radio-kort grupperet efter `category` fra API'et (fx Cocktail og Kaffe). Hvert kort viser navn og
-    pris (`tnum`).
-  - Antal: `type="number" min=1`, standard 1.
-  - Læg på værelse: valgfri native `<select>` over gæster, der er i huset i dag
-    (`GET /api/bookings?view=in_house`). Første valg er "Ingen" (standard).
-  - En primær "Registrér salg".
-- Dagens salg: `Tile flush`-tabel med tidspunkt, drink, kategori, antal, beløb og værelse
-  ("–" hvis det er et selvstændigt salg). `kr(total)` fra API-svaret i `tfoot`.
-- Succes: toasten "Salg registreret – 2 × Espresso Martini · 190 kr." vises med `amount` fra
-  API-svaret, og formularen nulstilles.
+- Venstre: drinks som store knapper grupperet efter kategori fra API'et (Cocktail, Kaffe). Et
+  tryk lægger 1 i ordren, og knappen viser antallet, mens drinken er i ordren.
+- Højre: "Ordre" (bliver stående ved scroll) med linjer (+/−, fjern), "Ryd", antal og et
+  visningsoverslag af totalen. Betaling: "Betalt direkte" eller "Læg på værelse" (gæster i huset
+  som "værelse · navn", forvalgt fra `?booking=`).
+- "Afslut ordre" sender `POST /api/bar-sales/orders`. Alle linjer registreres eller ingen.
+  Toasten viser API'ets total. Ordren tømmes, og betalingen nulstilles til direkte.
+
+## Omsætning (005 FR-014, FR-015)
+
+Kilde: `pages/Revenue.jsx`. Ét kald: `GET /api/revenue?from=&to=&groupBy=`.
+
+- Periode og gruppering i URL'en (`?fra=`, `?til=`, `?pr=`), genveje: Denne måned, I år, Sidste
+  år og 2000–i dag. Standard: i år pr. måned.
+- Fire fliser: Bar i alt, Solgte enheder, Værelser i alt (med nætter) og Samlet (`krShort` og
+  `krExact`).
+- Baren (primær): stablede søjler pr. periode (cocktail/kaffe; højden er kun en visningsskala),
+  "Vis som tabel", kategoriandele og top 5-drinks.
+- Værelser (sekundær): omsætning pr. periode og antal nætter.
+- API-fejl (fx pr. dag over 3 år) vises som banner ved feltet.
+
+## Profil og administration (005 FR-019, FR-020)
+
+Kilde: `pages/Profile.jsx`.
+
+- Konto: brugernavn og "Log ud".
+- Skift adgangskode: nuværende, ny (mindst 8 tegn) og gentag. Kun gentagelsen tjekkes i
+  formularen. Resten afgøres af API'et, og fejlen vises ved feltet.
+- Administration: prislisten som tabel (værelsestyper × sæsoner, "Gem" pr. række sender kun
+  ændrede celler) og drinkkortet (pris og "Gem" pr. drink). Nye priser gælder kun nye bookinger
+  og salg. Toast efter hver gemning.
 
 ## Bevidst udeladt
 
 Kan tilføjes, hvis der bliver tid. Ingen af dem er krav.
 
-- Kommandopalet (⌘K, `cmdk`).
-- Nøgletal som belægningsgrad og indtjening på Oversigt. De hører hjemme i Tableau (feature
-  002).
+- Ledelsens nøgletal og trends. De hører hjemme i Tableau (feature 002). Omsætningssiden er
+  receptionens hurtige overblik.
+- Betalingsmiddel, kvitteringer og fakturaer (005 Assumptions).
 - Aktivitetslog pr. booking.
