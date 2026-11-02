@@ -3,6 +3,7 @@ import { Link, useLoaderData, useLocation, useNavigate, useNavigation, useSearch
 import { MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react'
 import { api } from '../api.js'
 import { date, guestName, kr, nightsLabel, num } from '../format.js'
+import { Pagination, SortHeader } from '../Pagination.jsx'
 import { useShell } from '../Shell.jsx'
 import { Button, EmptyState, Kbd, PageHeader, SourceBadge, StatusBadge, Tile, cx, inputClass } from '../ui.jsx'
 
@@ -14,61 +15,95 @@ const TABS = [
   ['afrejst', 'Afrejst'],
   ['alle', 'Alle'],
 ]
+// Danish URL parameter → API parameter (contracts/README.md)
+const PARAMS = {
+  side: 'page',
+  'pr-side': 'pageSize',
+  sorter: 'sort',
+  orden: 'order',
+  q: 'q',
+  type: 'roomTypeId',
+  land: 'countryCode',
+  fra: 'from',
+  til: 'to',
+}
+const FILTERS = ['q', 'type', 'land', 'fra', 'til']
+const PAGE_SIZES = [25, 50, 100]
 
-// Filtering happens in the backend; the URL is the state (?q=, ?dato=, ?visning=)
-export function loader({ request }) {
+// Paging, sorting and filtering all happen in the backend; the URL is the state (005 FR-005–FR-007)
+export async function loader({ request }) {
   const url = new URL(request.url).searchParams
   const query = new URLSearchParams({ view: VIEWS[url.get('visning')] ?? 'upcoming' })
-  if (url.get('q')) query.set('q', url.get('q'))
-  if (url.get('dato')) query.set('date', url.get('dato'))
-  return api('/bookings?' + query)
+  for (const [da, en] of Object.entries(PARAMS)) if (url.get(da)) query.set(en, url.get(da))
+  const [list, roomTypes, countries] = await Promise.all([
+    api('/bookings?' + query),
+    api('/room-types'),
+    api('/countries'),
+  ])
+  return { ...list, roomTypes, countries }
 }
 
 const th = 'sticky top-0 h-12 border-b border-line bg-surface px-4 text-left text-sm font-medium text-ink-3'
 const td = 'border-b border-line px-4'
+const readFilters = (params) => Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? '']))
 
 export default function Bookings() {
-  const { total, totalPrice, counts, items } = useLoaderData()
+  const { total, totalPrice, counts, page, pageSize, pageCount, items, roomTypes, countries } = useLoaderData()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const navigation = useNavigation()
   const loading = navigation.state === 'loading'
   const { newBooking } = useShell()
   // Local copies, because the URL only updates once the loader has answered and typing must not lag
-  const [q, setQ] = useState(params.get('q') ?? '')
-  const [dato, setDato] = useState(params.get('dato') ?? '')
+  const [filters, setFilters] = useState(() => readFilters(params))
   // A navigation from elsewhere (sidebar link, back/forward, a tab) resets them to the URL. Only once idle: while
   // the user types, an older keystroke's URL can commit after a newer one has started and must not overwrite it.
   const locationKey = useLocation().key
   const [syncedKey, setSyncedKey] = useState(locationKey)
   if (locationKey !== syncedKey && navigation.state === 'idle') {
     setSyncedKey(locationKey)
-    setQ(params.get('q') ?? '')
-    setDato(params.get('dato') ?? '')
+    setFilters(readFilters(params))
   }
 
-  const setParam = (key, value) =>
+  // Any change but a page step starts on page 1 again (FR-007). Typing replaces the history entry.
+  const update = (changes, replace) =>
     setParams(
       (p) => {
-        value ? p.set(key, value) : p.delete(key)
+        for (const [key, value] of Object.entries(changes)) value ? p.set(key, value) : p.delete(key)
+        p.delete('side')
         return p
       },
-      { replace: true },
+      { replace },
     )
-  const filtered = Boolean(q || dato)
-  const activeTab = filtered ? 'alle' : (params.get('visning') ?? 'kommende')
-  const clear = () => {
-    setQ('')
-    setDato('')
-    setParams(
-      (p) => {
-        p.delete('q')
-        p.delete('dato')
-        return p
-      },
-      { replace: true },
-    )
+  const setFilter = (key, value) => {
+    setFilters((f) => ({ ...f, [key]: value }))
+    update({ [key]: value }, true)
   }
+  const clear = () => {
+    setFilters(readFilters(new URLSearchParams()))
+    update(Object.fromEntries(FILTERS.map((k) => [k, ''])), true)
+  }
+  const withParams = (changes) => {
+    const p = new URLSearchParams(params)
+    for (const [key, value] of Object.entries(changes)) value ? p.set(key, value) : p.delete(key)
+    return '?' + p
+  }
+
+  const filtered = FILTERS.some((k) => filters[k])
+  // The API ignores the view while searching (openapi GET /bookings), so "Alle" is shown as active
+  const activeTab = filters.q ? 'alle' : (params.get('visning') ?? 'kommende')
+  // Mirrors the API's defaults (openapi: sort=checkIn, order desc for departed) only to mark the active header
+  const sort = params.get('sorter') ?? 'checkIn'
+  const order = params.get('orden') ?? (VIEWS[activeTab] === 'departed' ? 'desc' : 'asc')
+  const sortHeader = (field, label, className) => (
+    <SortHeader
+      label={label}
+      active={sort === field}
+      order={order}
+      className={cx(th, className)}
+      onSort={() => update({ sorter: field, orden: sort === field && order === 'asc' ? 'desc' : 'asc' })}
+    />
+  )
 
   return (
     <>
@@ -84,67 +119,108 @@ export default function Bookings() {
         }
       />
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative">
           <MagnifyingGlassIcon size={17} className="pointer-events-none absolute top-3 left-3 text-ink-3" />
           <label htmlFor="booking-search" className="sr-only">
-            Søg på gæstenavn
+            Søg på navn, bookingnummer eller værelse
           </label>
           <input
             id="booking-search"
             type="search"
-            placeholder="Søg på gæstenavn"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value)
-              setParam('q', e.target.value)
-            }}
+            placeholder="Søg på navn, bookingnr. eller værelse"
+            value={filters.q}
+            onChange={(e) => setFilter('q', e.target.value)}
             className={cx(inputClass, 'w-80 pl-10')}
           />
         </div>
-        <label htmlFor="booking-date" className="sr-only">
-          Bor på hotellet den
+        <label htmlFor="booking-type" className="sr-only">
+          Værelsestype
         </label>
-        <input
-          id="booking-date"
-          type="date"
-          value={dato}
-          onChange={(e) => {
-            setDato(e.target.value)
-            setParam('dato', e.target.value)
-          }}
+        <select
+          id="booking-type"
+          value={filters.type}
+          onChange={(e) => setFilter('type', e.target.value)}
           className={cx(inputClass, 'w-auto')}
-        />
+        >
+          <option value="">Alle værelsestyper</option>
+          {roomTypes.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="booking-country" className="sr-only">
+          Land
+        </label>
+        <select
+          id="booking-country"
+          value={filters.land}
+          onChange={(e) => setFilter('land', e.target.value)}
+          className={cx(inputClass, 'w-auto max-w-52')}
+        >
+          <option value="">Alle lande</option>
+          {countries.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <fieldset className="flex items-center gap-2">
+          <legend className="sr-only">Ophold i perioden</legend>
+          <label htmlFor="booking-from" className="text-sm text-ink-2">
+            Periode
+          </label>
+          <input
+            id="booking-from"
+            type="date"
+            value={filters.fra}
+            onChange={(e) => setFilter('fra', e.target.value)}
+            className={cx(inputClass, 'w-auto')}
+          />
+          <label htmlFor="booking-to" className="text-ink-3">
+            <span aria-hidden>–</span>
+            <span className="sr-only">til</span>
+          </label>
+          <input
+            id="booking-to"
+            type="date"
+            value={filters.til}
+            onChange={(e) => setFilter('til', e.target.value)}
+            className={cx(inputClass, 'w-auto')}
+          />
+        </fieldset>
         {filtered && (
           <Button variant="ghost" onClick={clear}>
-            Ryd
+            Ryd filtre
           </Button>
         )}
-
-        <nav aria-label="Visning" className="ml-auto flex gap-1">
-          {TABS.map(([slug, label]) => (
-            <Link
-              key={slug}
-              to={'?visning=' + slug}
-              aria-current={activeTab === slug ? 'page' : undefined}
-              className={cx(
-                'flex h-10 items-center gap-2 rounded-lg px-4 transition-colors duration-100',
-                activeTab === slug ? 'bg-surface font-medium shadow-panel' : 'text-ink-2 hover:bg-ink/[0.04]',
-              )}
-            >
-              {label}
-              <span className="tnum font-normal text-ink-3">{num(counts[VIEWS[slug]])}</span>
-            </Link>
-          ))}
-        </nav>
       </div>
+
+      <nav aria-label="Visning" className="mb-5 flex gap-1">
+        {TABS.map(([slug, label]) => (
+          <Link
+            key={slug}
+            // A tab keeps the other filters but leaves the search, which would override the view
+            to={withParams({ visning: slug, q: '', side: '' })}
+            aria-current={activeTab === slug ? 'page' : undefined}
+            className={cx(
+              'flex h-10 items-center gap-2 rounded-lg px-4 transition-colors duration-100',
+              activeTab === slug ? 'bg-surface font-medium shadow-panel' : 'text-ink-2 hover:bg-ink/[0.04]',
+            )}
+          >
+            {label}
+            <span className="tnum font-normal text-ink-3">{num(counts[VIEWS[slug]])}</span>
+          </Link>
+        ))}
+      </nav>
 
       <Tile flush>
         {items.length === 0 ? (
           filtered ? (
             <EmptyState
-              title={q ? `Ingen bookinger matcher "${q}".` : 'Ingen bookinger på den valgte dato.'}
-              action={<Button onClick={clear}>Ryd søgning</Button>}
+              title={filters.q ? `Ingen bookinger matcher "${filters.q}".` : 'Ingen bookinger matcher filtrene.'}
+              action={<Button onClick={clear}>Ryd filtre</Button>}
             />
           ) : (
             <EmptyState
@@ -156,13 +232,14 @@ export default function Bookings() {
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className={cx(th, 'rounded-tl-2xl pl-6')}>Periode</th>
-                <th className={th}>Gæst</th>
+                {sortHeader('checkIn', 'Ankomst', 'rounded-tl-2xl pl-6')}
+                {sortHeader('checkOut', 'Afrejse')}
+                {sortHeader('nights', 'Nætter', 'text-right')}
+                {sortHeader('guest', 'Gæst')}
                 <th className={th}>Værelse</th>
                 <th className={cx(th, 'text-right')}>Gæster</th>
                 <th className={th}>Status</th>
-                <th className={th}>Kilde</th>
-                <th className={cx(th, 'rounded-tr-2xl pr-6 text-right')}>Pris</th>
+                {sortHeader('totalPrice', 'Pris', 'rounded-tr-2xl pr-6 text-right')}
               </tr>
             </thead>
             <tbody className={cx('transition-opacity duration-100', loading && 'opacity-60')}>
@@ -172,12 +249,9 @@ export default function Bookings() {
                   onClick={() => navigate(`/bookinger/${b.id}`)}
                   className="h-16 cursor-pointer hover:[&>td]:bg-sunken/60"
                 >
-                  <td className={cx(td, 'tnum pl-6')}>
-                    <div>
-                      {date(b.checkIn)} – {date(b.checkOut)}
-                    </div>
-                    <div className="text-sm text-ink-3">{nightsLabel(b.nights)}</div>
-                  </td>
+                  <td className={cx(td, 'tnum pl-6')}>{date(b.checkIn)}</td>
+                  <td className={cx(td, 'tnum')}>{date(b.checkOut)}</td>
+                  <td className={cx(td, 'tnum text-right')}>{nightsLabel(b.nights)}</td>
                   <td className={td}>
                     <Link
                       to={`/bookinger/${b.id}`}
@@ -186,7 +260,11 @@ export default function Bookings() {
                     >
                       {guestName(b)}
                     </Link>
-                    <div className="text-sm text-ink-3">{b.country.name}</div>
+                    <div className="flex items-center gap-2 text-sm text-ink-3">
+                      <span className="tnum">#{b.id}</span>
+                      {b.country.name}
+                      {b.source === 'booking_system' && <SourceBadge />}
+                    </div>
                   </td>
                   <td className={td}>
                     <div>{b.roomType.name}</div>
@@ -196,16 +274,13 @@ export default function Bookings() {
                   <td className={td}>
                     <StatusBadge status={b.status} />
                   </td>
-                  <td className={td}>
-                    {b.source === 'booking_system' ? <SourceBadge /> : <span className="text-ink-4">–</span>}
-                  </td>
                   <td className={cx(td, 'tnum pr-6 text-right')}>{kr(b.totalPrice)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="h-16">
-                <td colSpan={6} className="tnum pl-6 text-ink-2">
+                <td colSpan={7} className="tnum pl-6 text-ink-2">
                   I alt, {num(total)} bookinger
                 </td>
                 <td className="tnum pr-6 text-right text-lg font-semibold">{kr(totalPrice)}</td>
@@ -215,9 +290,16 @@ export default function Bookings() {
         )}
       </Tile>
       {items.length > 0 && (
-        <p className="tnum mt-3 text-sm text-ink-3">
-          Viser {num(items.length)} af {num(total)}
-        </p>
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          total={total}
+          shown={items.length}
+          sizes={PAGE_SIZES}
+          hrefFor={(n) => withParams({ side: n > 1 && String(n) })}
+          onPageSize={(n) => update({ 'pr-side': n })}
+        />
       )}
     </>
   )

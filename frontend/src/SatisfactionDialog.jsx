@@ -14,6 +14,36 @@ const SCORES = [
   [5, 'Meget tilfreds'],
 ]
 
+// Check-in and check-out from the overview and the folio. Which one is valid is the API's call (INVALID_STATUS);
+// the pages only offer the button that fits booking.status. Check-out goes straight on to the score (005 US1 #4).
+export function useStayActions() {
+  const toast = useToast()
+  const revalidator = useRevalidator()
+  const [pending, setPending] = useState(null)
+  const [rating, setRating] = useState(null)
+
+  async function run(booking, action) {
+    setPending(booking.id)
+    try {
+      const saved = await api(`/bookings/${booking.id}/${action}`, { method: 'POST' })
+      toast({
+        title: action === 'check-in' ? 'Tjekket ind' : 'Tjekket ud',
+        description: `${guestName(saved)} · værelse ${saved.room.number}`,
+      })
+      if (action === 'check-out') setRating(saved)
+    } catch (err) {
+      toast({ title: err.message, tone: 'danger' })
+    } finally {
+      setPending(null)
+      // Also after an error: the booking may have been checked in or deleted elsewhere
+      revalidator.revalidate()
+    }
+  }
+
+  const dialog = rating && <SatisfactionDialog booking={rating} onClose={() => setRating(null)} />
+  return { run, pending, rate: setRating, dialog }
+}
+
 // Mounted when opened and unmounted on close, like BookingForm. Whether a score is allowed yet is the API's call (FR-011).
 export default function SatisfactionDialog({ booking, onClose }) {
   const ref = useRef()

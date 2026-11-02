@@ -1,19 +1,23 @@
 import { useRef, useState } from 'react'
 import { Link, useLoaderData, useNavigate } from 'react-router'
-import { PencilSimpleIcon, SpinnerGapIcon, TrashIcon } from '@phosphor-icons/react'
+import {
+  MartiniIcon,
+  PencilSimpleIcon,
+  SignInIcon,
+  SignOutIcon,
+  SmileyIcon,
+  SpinnerGapIcon,
+  TrashIcon,
+} from '@phosphor-icons/react'
 import { api } from '../api.js'
-import { dateTime, guestName, kr, longDate, nightsLabel, num, period } from '../format.js'
-import SatisfactionDialog from '../SatisfactionDialog.jsx'
+import { date, dateTime, guestName, kr, num, period } from '../format.js'
+import { useStayActions } from '../SatisfactionDialog.jsx'
 import { useShell } from '../Shell.jsx'
-import { Button, ButtonLink, EmptyState, Field, PageHeader, SourceBadge, Stat, StatusBadge, Tile, cx } from '../ui.jsx'
+import { Button, ButtonLink, EmptyState, Field, PageHeader, SourceBadge, StatusBadge, Tile, cx } from '../ui.jsx'
 
 export async function loader({ params }) {
   try {
-    const [booking, sales] = await Promise.all([
-      api(`/bookings/${params.id}`),
-      api(`/bar-sales?bookingId=${params.id}`),
-    ])
-    return { booking, sales }
+    return await api(`/bookings/${params.id}/folio`)
   } catch (e) {
     if (e.status === 404) return { booking: null }
     throw e
@@ -22,14 +26,16 @@ export async function loader({ params }) {
 
 const th = 'h-12 border-b border-line px-4 text-left text-sm font-medium text-ink-3'
 const td = 'h-14 border-b border-line px-4'
+const orDash = (value) => value ?? <span className="text-ink-4">–</span>
 
+// The guest's folio: booking, nights, bar sales and bill, all amounts from the API (005 FR-008–FR-010)
 export default function BookingDetail() {
-  const { booking, sales } = useLoaderData()
+  const { booking, nights, barSales, bill } = useLoaderData()
   const { toast, editBooking } = useShell()
   const navigate = useNavigate()
+  const stayActions = useStayActions()
   const confirmRef = useRef()
   const [deleting, setDeleting] = useState(false)
-  const [rating, setRating] = useState(false)
 
   if (!booking) {
     return (
@@ -41,6 +47,7 @@ export default function BookingDetail() {
   }
 
   const stay = period(booking.checkIn, booking.checkOut)
+  const pending = stayActions.pending === booking.id
 
   async function onDelete() {
     setDeleting(true)
@@ -71,14 +78,37 @@ export default function BookingDetail() {
             <StatusBadge status={booking.status} />
           </span>
         }
-        description={`${stay} · ${booking.roomType.name}, værelse ${booking.room.number} · ${booking.country.name}`}
+        description={`Booking #${booking.id} · ${stay} · ${booking.roomType.name}, værelse ${booking.room.number}`}
         actions={
           <>
-            {/* The API's status decides when a score is allowed; React does not compare dates (FR-012 (003)) */}
-            {booking.status === 'departed' && <Button onClick={() => setRating(true)}>Registrér tilfredshed</Button>}
+            {/* Only the step that fits the API's status is offered; the API has the last word (FR-010) */}
+            {booking.status === 'arriving' && (
+              <Button variant="primary" disabled={pending} onClick={() => stayActions.run(booking, 'check-in')}>
+                {pending ? <SpinnerGapIcon size={16} className="animate-spin" /> : <SignInIcon size={16} />}
+                Tjek ind
+              </Button>
+            )}
+            {booking.status === 'departing' && (
+              <Button variant="primary" disabled={pending} onClick={() => stayActions.run(booking, 'check-out')}>
+                {pending ? <SpinnerGapIcon size={16} className="animate-spin" /> : <SignOutIcon size={16} />}
+                Tjek ud
+              </Button>
+            )}
+            {['arriving', 'in_house'].includes(booking.status) && (
+              <ButtonLink to={`/barsalg?booking=${booking.id}`}>
+                <MartiniIcon size={16} className="text-ink-3" />
+                Sælg på værelset
+              </ButtonLink>
+            )}
+            {['departing', 'checked_out', 'departed'].includes(booking.status) && (
+              <Button onClick={() => stayActions.rate(booking)}>
+                <SmileyIcon size={16} className="text-ink-3" />
+                {booking.satisfactionScore != null ? 'Ret tilfredshed' : 'Registrér tilfredshed'}
+              </Button>
+            )}
             <Button onClick={() => editBooking(booking)}>
               <PencilSimpleIcon size={16} className="text-ink-3" />
-              Rediger
+              Ret
             </Button>
             <Button variant="danger" onClick={() => confirmRef.current.showModal()}>
               <TrashIcon size={16} />
@@ -88,42 +118,76 @@ export default function BookingDetail() {
         }
       />
 
-      <div className="grid grid-cols-12 gap-5">
-        <Tile title="Ophold" className="col-span-7">
+      <div className="grid grid-cols-12 items-start gap-5">
+        <Tile title="Gæst" className="col-span-4">
           <dl className="divide-y divide-line">
-            <Field label="Ankomst">{longDate(booking.checkIn)}</Field>
-            <Field label="Afrejse">{longDate(booking.checkOut)}</Field>
-            <Field label="Nætter">{num(booking.nights)}</Field>
-            <Field label="Gæster">{num(booking.guestCount)}</Field>
-            <Field label="Værelse">
-              {booking.roomType.name} · {booking.room.number}
-            </Field>
-            <Field label="Tilfredshed">
-              {booking.satisfactionScore != null ? `${booking.satisfactionScore} af 5` : '–'}
-            </Field>
+            <Field label="Navn">{guestName(booking)}</Field>
+            <Field label="Land">{booking.country.name}</Field>
+            <Field label="Antal gæster">{num(booking.guestCount)}</Field>
             <Field label="Kilde">{booking.source === 'booking_system' ? <SourceBadge /> : 'Back office'}</Field>
             <Field label="Oprettet">{dateTime(booking.createdAt)}</Field>
           </dl>
         </Tile>
 
-        {/* The stored total only: a per-season split would use today's prices and could differ (FR-009) */}
-        <Tile title="Pris" className="col-span-5">
-          <Stat label="Totalpris" value={kr(booking.totalPrice)} context={nightsLabel(booking.nights)} />
+        <Tile title="Ophold" className="col-span-4">
+          <dl className="divide-y divide-line">
+            <Field label="Ankomst">{date(booking.checkIn)}</Field>
+            <Field label="Afrejse">{date(booking.checkOut)}</Field>
+            <Field label="Nætter">{num(booking.nights)}</Field>
+            <Field label="Værelse">
+              {booking.room.number} · {booking.roomType.name}
+            </Field>
+            <Field label="Tjekket ind">{orDash(booking.checkedInAt && dateTime(booking.checkedInAt))}</Field>
+            <Field label="Tjekket ud">{orDash(booking.checkedOutAt && dateTime(booking.checkedOutAt))}</Field>
+            <Field label="Tilfredshed">
+              {orDash(booking.satisfactionScore != null ? `${booking.satisfactionScore} af 5` : null)}
+            </Field>
+          </dl>
         </Tile>
 
-        <Tile
-          title="Barsalg på værelset"
-          flush
-          className="col-span-12"
-          action={
-            ['arriving', 'in_house'].includes(booking.status) && (
-              <ButtonLink to={`/barsalg?booking=${booking.id}`} size="sm">
-                Registrér salg
-              </ButtonLink>
-            )
-          }
-        >
-          {sales.items.length === 0 ? (
+        <Tile title="Regning" className="col-span-4">
+          <dl className="divide-y divide-line">
+            <Field label="Ophold">{kr(bill.stay)}</Field>
+            <Field label="Barsalg">{kr(bill.bar)}</Field>
+            <div className="flex items-baseline justify-between gap-4 pt-4">
+              <dt className="font-medium">I alt</dt>
+              <dd className="tnum text-3xl font-semibold tracking-[-0.02em]">{kr(bill.total)}</dd>
+            </div>
+          </dl>
+        </Tile>
+
+        {/* Each night's share of the frozen price, split by the backend so the lines sum to it (FR-008) */}
+        <Tile title="Nætter" count={num(nights.length)} flush className="col-span-6">
+          <table className="w-full border-separate border-spacing-0">
+            <thead>
+              <tr>
+                <th className={cx(th, 'pl-6')}>Dato</th>
+                <th className={th}>Sæson</th>
+                <th className={cx(th, 'pr-6 text-right')}>Pris</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nights.map((n) => (
+                <tr key={n.date}>
+                  <td className={cx(td, 'tnum pl-6')}>{date(n.date)}</td>
+                  <td className={td}>{orDash(n.season)}</td>
+                  <td className={cx(td, 'tnum pr-6 text-right')}>{kr(n.price)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="h-14">
+                <td colSpan={2} className="pl-6 text-ink-2">
+                  Opholdet i alt
+                </td>
+                <td className="tnum pr-6 text-right text-lg font-semibold">{kr(bill.stay)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </Tile>
+
+        <Tile title="Barsalg på værelset" count={num(barSales.items.length)} flush className="col-span-6">
+          {barSales.items.length === 0 ? (
             <EmptyState title="Ingen barsalg på bookingen." />
           ) : (
             <table className="w-full border-separate border-spacing-0">
@@ -136,7 +200,7 @@ export default function BookingDetail() {
                 </tr>
               </thead>
               <tbody>
-                {sales.items.map((s) => (
+                {barSales.items.map((s) => (
                   <tr key={s.id}>
                     <td className={cx(td, 'tnum pl-6')}>{dateTime(s.soldAt)}</td>
                     <td className={td}>{s.drink.name}</td>
@@ -148,9 +212,9 @@ export default function BookingDetail() {
               <tfoot>
                 <tr className="h-14">
                   <td colSpan={3} className="pl-6 text-ink-2">
-                    I alt
+                    Barsalg i alt
                   </td>
-                  <td className="tnum pr-6 text-right text-lg font-semibold">{kr(sales.total)}</td>
+                  <td className="tnum pr-6 text-right text-lg font-semibold">{kr(barSales.total)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -158,7 +222,7 @@ export default function BookingDetail() {
         </Tile>
       </div>
 
-      {rating && <SatisfactionDialog booking={booking} onClose={() => setRating(false)} />}
+      {stayActions.dialog}
 
       <dialog
         ref={confirmRef}
