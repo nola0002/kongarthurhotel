@@ -5,7 +5,8 @@ const krShortFmt = new Intl.NumberFormat('da-DK', {
   style: 'currency',
   currency: 'DKK',
   notation: 'compact',
-  maximumFractionDigits: 1,
+  // Three significant digits keep the width fixed: "13,4 mio. kr.", "103 mio. kr.", "1,25 mia. kr."
+  maximumSignificantDigits: 3,
 })
 const numFmt = new Intl.NumberFormat('da-DK')
 const pctFmt = new Intl.NumberFormat('da-DK', { style: 'percent', maximumFractionDigits: 1 })

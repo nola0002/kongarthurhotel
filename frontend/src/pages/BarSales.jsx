@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLoaderData, useSearchParams } from 'react-router'
-import { ChartBarIcon, MinusIcon, PlusIcon, SpinnerGapIcon, XIcon } from '@phosphor-icons/react'
+import { MinusIcon, PlusIcon, SpinnerGapIcon, XIcon } from '@phosphor-icons/react'
 import { api } from '../api.js'
 import { guestName, krExact as kr, num } from '../format.js'
 import { useToast } from '../Shell.jsx'
@@ -94,10 +94,9 @@ function Till({ booking }) {
     <>
       <PageHeader
         title="Kasse"
-        description="Lobbybaren"
+        description="Helene Christine · lobbybaren"
         actions={
           <ButtonLink to="/omsaetning" variant="ghost" size="sm">
-            <ChartBarIcon size={16} className="text-ink-3" />
             Omsætning
           </ButtonLink>
         }
@@ -119,18 +118,21 @@ function Till({ booking }) {
                       type="button"
                       onClick={() => change(d, 1)}
                       className={cx(
-                        'relative flex h-24 flex-col justify-between rounded-xl p-4 text-left shadow-panel transition-colors duration-100 select-none',
+                        'flex h-24 flex-col justify-between rounded-xl px-4 py-3.5 text-left shadow-panel transition-colors duration-100 select-none',
                         quantity ? 'bg-signal-soft ring-1 ring-signal/40' : 'bg-surface hover:bg-sunken active:bg-line',
                       )}
                     >
-                      <span className="pr-8 leading-snug font-medium">{d.name}</span>
-                      <span className="tnum text-sm text-ink-3">{kr(d.price)}</span>
-                      {quantity > 0 && (
-                        <span className="tnum absolute top-3 right-3 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-signal px-1.5 text-sm font-medium text-white">
-                          {num(quantity)}
-                          <span className="sr-only"> i ordren</span>
-                        </span>
-                      )}
+                      <span className="leading-snug font-medium">{d.name}</span>
+                      {/* The count sits next to the price, so the name keeps the full width and does not wrap */}
+                      <span className="flex h-6 items-center justify-between">
+                        <span className="tnum text-sm text-ink-3">{kr(d.price)}</span>
+                        {quantity > 0 && (
+                          <span className="tnum inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-signal px-1.5 text-sm font-medium text-white">
+                            {num(quantity)}
+                            <span className="sr-only"> i ordren</span>
+                          </span>
+                        )}
+                      </span>
                     </button>
                   )
                 })}
@@ -153,7 +155,7 @@ function Till({ booking }) {
         >
           <form onSubmit={onSubmit} className="space-y-6">
             {lines.length === 0 ? (
-              <EmptyState title="Ordren er tom." body="Tryk på en drink for at lægge den i ordren." />
+              <EmptyState title="Ordren er tom." />
             ) : (
               <ul className="divide-y divide-line">
                 {lines.map(({ drink, quantity }) => (

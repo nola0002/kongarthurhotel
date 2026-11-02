@@ -2,12 +2,32 @@ import { useState } from 'react'
 import { Link, useLoaderData, useNavigate } from 'react-router'
 import { api } from '../api.js'
 import { date, kr, krExact, krShort, nightsLabel, num, pct, period, today } from '../format.js'
-import { EmptyState, ErrorBanner, PageHeader, Stat, Tile, cx, inputClass, invalidProps, labelClass } from '../ui.jsx'
+import {
+  EmptyState,
+  ErrorBanner,
+  FieldError,
+  PageHeader,
+  Stat,
+  Tile,
+  cx,
+  inputClass,
+  invalidProps,
+  labelClass,
+} from '../ui.jsx'
 
 // Danish URL values (design principle 12) for the API's groupBy
 const GROUP_PARAM = { day: 'dag', month: 'maaned', year: 'aar' }
 const GROUP_LABEL = { day: 'Dag', month: 'Måned', year: 'År' }
 const PER = { day: 'pr. dag', month: 'pr. måned', year: 'pr. år' }
+// Fields that show the API's error themselves; any other error is a banner
+const FIELDS = ['from', 'to', 'groupBy']
+
+// Zero width, so a long message runs on to the right instead of widening the field (inputClass has w-full)
+const InlineError = (props) => (
+  <div className="w-0 whitespace-nowrap">
+    <FieldError {...props} />
+  </div>
+)
 
 const toSearch = ({ from, to, groupBy }) => '?' + new URLSearchParams({ fra: from, til: to, pr: GROUP_PARAM[groupBy] })
 
@@ -51,7 +71,7 @@ const periodLabel = (p) =>
 const SHADES = ['bg-signal', 'bg-signal/35', 'bg-ink-3', 'bg-ink-4']
 const shade = (i) => SHADES[i % SHADES.length]
 
-const th = 'sticky top-0 h-12 border-b border-line bg-surface px-4 text-left text-sm font-medium text-ink-3'
+const th = 'h-12 border-b border-line bg-surface px-4 text-left text-sm font-medium text-ink-3'
 const td = 'h-12 border-b border-line px-4'
 
 export default function Revenue() {
@@ -98,7 +118,7 @@ export default function Revenue() {
         }
       />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <div className="mb-5 flex flex-wrap items-start gap-4">
         <div>
           <label htmlFor="fra" className={labelClass}>
             Fra
@@ -112,6 +132,7 @@ export default function Revenue() {
             className={cx(inputClass, 'w-auto')}
             {...invalidProps(error, 'from')}
           />
+          <InlineError error={error} name="from" />
         </div>
         <div>
           <label htmlFor="til" className={labelClass}>
@@ -126,6 +147,7 @@ export default function Revenue() {
             className={cx(inputClass, 'w-auto')}
             {...invalidProps(error, 'to')}
           />
+          <InlineError error={error} name="to" />
         </div>
         <div>
           <label htmlFor="pr" className={labelClass}>
@@ -144,10 +166,11 @@ export default function Revenue() {
               </option>
             ))}
           </select>
+          <InlineError error={error} name="groupBy" />
         </div>
       </div>
 
-      {error ? <ErrorBanner error={error} /> : <RevenueReport revenue={revenue} />}
+      {error ? !FIELDS.includes(error.field) && <ErrorBanner error={error} /> : <RevenueReport revenue={revenue} />}
     </>
   )
 }
@@ -164,7 +187,7 @@ function RevenueReport({ revenue }) {
           <Stat label="Bar i alt" value={krShort(bar.total)} context={krExact(bar.total)} />
         </Tile>
         <Tile>
-          <Stat label="Solgte enheder" value={num(bar.quantity)} context="drinks i perioden" />
+          <Stat label="Solgte enheder" value={num(bar.quantity)} />
         </Tile>
         <Tile>
           <Stat label="Værelser i alt" value={krShort(rooms.total)} context={nightsLabel(rooms.nights)} />
@@ -198,7 +221,7 @@ function RevenueReport({ revenue }) {
                 <summary className="cursor-pointer text-sm text-ink-2 hover:text-ink">Vis som tabel</summary>
                 <div className="mt-3 max-h-96 overflow-auto">
                   <table className="w-full border-separate border-spacing-0">
-                    <thead>
+                    <thead className="sticky top-0">
                       <tr>
                         <th className={th}>Periode</th>
                         {categories.map((c) => (
@@ -286,7 +309,7 @@ function RevenueReport({ revenue }) {
         ) : (
           <div className="max-h-96 overflow-auto rounded-b-2xl">
             <table className="w-full border-separate border-spacing-0">
-              <thead>
+              <thead className="sticky top-0">
                 <tr>
                   <th className={cx(th, 'w-40 pl-6')}>Periode</th>
                   <th className={th}>
@@ -327,16 +350,13 @@ const maxTotal = (rows) => Math.max(...rows.map((r) => r.total))
 
 function BarChart({ byPeriod, categories }) {
   const max = maxTotal(byPeriod)
-  const labelled = byPeriod.length <= 31
+  const gap = byPeriod.length <= 60 ? 'gap-1.5' : byPeriod.length <= 200 && 'gap-px'
+  // At most 8 labels, so "2005" or "jan. 2025" is never squeezed into one narrow bar
+  const step = Math.ceil(byPeriod.length / 8)
   return (
     <div role="img" aria-label="Søjlediagram over baromsætningen pr. periode. Tallene står i tabellen nedenfor.">
       <p className="tnum text-xs text-ink-3">{kr(max)}</p>
-      <div
-        className={cx(
-          'mt-1 flex h-64 items-end border-b border-line',
-          byPeriod.length <= 60 ? 'gap-1.5' : byPeriod.length <= 200 && 'gap-px',
-        )}
-      >
+      <div className={cx('mt-1 flex h-64 items-end border-b border-line', gap)}>
         {byPeriod.map((p) => (
           <div
             key={p.period}
@@ -355,18 +375,13 @@ function BarChart({ byPeriod, categories }) {
           </div>
         ))}
       </div>
-      <div className={cx('mt-2 flex text-xs text-ink-3', labelled ? 'gap-1.5' : 'justify-between')}>
-        {labelled
-          ? byPeriod.map((p) => (
-              <span key={p.period} className="tnum min-w-0 flex-1 truncate text-center">
-                {periodLabel(p.period)}
-              </span>
-            ))
-          : [byPeriod[0], byPeriod.at(-1)].map((p) => (
-              <span key={p.period} className="tnum">
-                {periodLabel(p.period)}
-              </span>
-            ))}
+      {/* One slot per bar, so a label sits under its bar; flex centres it even when wider than the bar */}
+      <div className={cx('mt-2 flex text-xs text-ink-3', gap)}>
+        {byPeriod.map((p, i) => (
+          <span key={p.period} className="tnum flex min-w-0 flex-1 justify-center whitespace-nowrap">
+            {i % step === 0 && periodLabel(p.period)}
+          </span>
+        ))}
       </div>
     </div>
   )

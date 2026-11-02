@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useLoaderData, useNavigate, useRevalidator } from 'react-router'
-import { SignOutIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import { useLoaderData, useRevalidator } from 'react-router'
+import { SpinnerGapIcon } from '@phosphor-icons/react'
 import { api } from '../api.js'
 import { kr } from '../format.js'
 import { useToast } from '../Shell.jsx'
@@ -13,60 +13,25 @@ export async function loader() {
 
 const thClass = 'h-12 border-b border-line px-4 text-left text-sm font-medium text-ink-3 first:pl-6 last:pr-6'
 const tdClass = 'h-16 border-b border-line px-4 first:pl-6 last:pr-6'
-const priceInputClass = cx(inputClass, 'tnum w-32 text-right')
+// w-24! because inputClass has w-full, which otherwise wins and lets the table size the fields
+const priceInputClass = cx(inputClass, 'tnum w-24! text-right')
+// One line under the narrow field: zero width at the right edge, so the API's message runs out to the left instead of
+// wrapping or widening the column
+const errorClass = 'mt-1.5 ml-auto flex w-0 justify-end text-sm whitespace-nowrap text-danger'
 
 export default function Profile() {
   const { username, priceList, drinks } = useLoaderData()
   return (
     <>
-      <PageHeader title="Profil" description="Din konto og hotellets priser." />
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        <Account username={username} />
+      <PageHeader title="Profil" description={username} />
+      <div className="grid grid-cols-12 items-start gap-5">
         <PasswordForm />
-      </div>
-      <h2 className="pt-12 pb-1 text-2xl font-semibold tracking-[-0.02em]">Administration</h2>
-      <p className="pb-6 text-ink-2">Nye priser gælder nye bookinger og salg. Eksisterende beholder deres pris.</p>
-      <div className="space-y-6">
-        <PriceList priceList={priceList} />
-        <DrinkPrices drinks={drinks} />
-      </div>
-    </>
-  )
-}
-
-function Account({ username }) {
-  const navigate = useNavigate()
-  const toast = useToast()
-
-  async function logout() {
-    try {
-      await api('/auth/logout', { method: 'POST' })
-    } catch (e) {
-      // 401: the session had already expired, so the user is logged out anyway
-      if (e.status !== 401) return toast({ title: e.message, tone: 'danger' })
-    }
-    navigate('/login')
-  }
-
-  return (
-    <Tile title="Konto">
-      <div className="flex items-center gap-4">
-        <span
-          aria-hidden
-          className="grid size-12 shrink-0 place-items-center rounded-full bg-sunken text-lg font-semibold text-ink-2 uppercase shadow-panel"
-        >
-          {username.slice(0, 1)}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-lg font-medium">{username}</p>
-          <p className="text-sm text-ink-3">Receptionens fælles konto</p>
+        <div className="col-span-8 space-y-5">
+          <PriceList priceList={priceList} />
+          <DrinkPrices drinks={drinks} />
         </div>
       </div>
-      <Button className="mt-6" onClick={logout}>
-        <SignOutIcon size={17} className="text-ink-3" />
-        Log ud
-      </Button>
-    </Tile>
+    </>
   )
 }
 
@@ -88,7 +53,7 @@ function PasswordForm() {
       await api('/auth/password', { method: 'PUT', body: { currentPassword, newPassword } })
       form.reset()
       setError(null)
-      toast({ title: 'Adgangskode skiftet', description: 'Brug den nye adgangskode næste gang du logger ind.' })
+      toast({ title: 'Adgangskode skiftet' })
     } catch (err) {
       setError(err)
     }
@@ -103,10 +68,10 @@ function PasswordForm() {
   const known = fields.some((f) => f.name === error?.field)
 
   return (
-    <Tile title="Skift adgangskode">
+    <Tile title="Adgangskode" className="col-span-4">
       <form onSubmit={onSubmit} onChange={() => setError(null)} className="space-y-4">
         {!known && <ErrorBanner error={error} />}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-4">
           {fields.map(({ name, label, ...props }) => (
             <div key={name}>
               <label htmlFor={name} className={labelClass}>
@@ -126,13 +91,10 @@ function PasswordForm() {
             </div>
           ))}
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-ink-3">Mindst 8 tegn.</p>
-          <Button type="submit" variant="primary" disabled={pending}>
-            {pending && <SpinnerGapIcon size={16} className="animate-spin" />}
-            Skift adgangskode
-          </Button>
-        </div>
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending && <SpinnerGapIcon size={16} className="animate-spin" />}
+          Skift adgangskode
+        </Button>
       </form>
     </Tile>
   )
@@ -174,7 +136,7 @@ function PriceList({ priceList: { seasons, roomTypes } }) {
   }
 
   return (
-    <Tile title="Prisliste" flush action={<span className="text-sm text-ink-3">Pris pr. nat i kr.</span>}>
+    <Tile title="Prisliste" flush>
       <div className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0">
           <thead>
@@ -193,18 +155,23 @@ function PriceList({ priceList: { seasons, roomTypes } }) {
           <tbody>
             {roomTypes.map((rt) => (
               <tr key={rt.id}>
-                <th scope="row" className={cx(tdClass, 'text-left font-medium')}>
-                  {rt.name}
+                {/* Top-aligned in h-11 boxes, so name, fields and Gem stay on one line when a field shows an error */}
+                <th scope="row" className={cx(tdClass, 'py-3 text-left align-top font-medium whitespace-nowrap')}>
+                  <span className="flex h-11 items-center">{rt.name}</span>
                 </th>
                 {seasons.map((s) => {
                   const id = `price-${rt.id}-${s.id}`
-                  const error = errors[`${rt.id}-${s.id}`]
+                  const cell = `${rt.id}-${s.id}`
+                  const error = errors[cell]
+                  const price = rt.prices.find((p) => p.seasonId === s.id)?.price
                   return (
                     <td key={s.id} className={cx(tdClass, 'py-3 text-right align-top')}>
                       <label htmlFor={id} className="sr-only">
                         {rt.name}, {s.name}
                       </label>
+                      {/* key: a saved price remounts the field, so it shows the stored value after revalidation */}
                       <input
+                        key={price}
                         id={id}
                         name={`s${s.id}`}
                         form={`prices-${rt.id}`}
@@ -212,20 +179,21 @@ function PriceList({ priceList: { seasons, roomTypes } }) {
                         min="0"
                         step="0.01"
                         inputMode="decimal"
-                        defaultValue={rt.prices.find((p) => p.seasonId === s.id)?.price}
+                        defaultValue={price}
+                        onChange={() => error && setErrors((errs) => ({ ...errs, [cell]: undefined }))}
                         className={priceInputClass}
                         {...(error && { 'aria-invalid': true, 'aria-describedby': `${id}-error` })}
                       />
                       {error && (
-                        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm text-danger">
+                        <p id={`${id}-error`} role="alert" className={errorClass}>
                           {error.message}
                         </p>
                       )}
                     </td>
                   )
                 })}
-                <td className={cx(tdClass, 'w-px text-right')}>
-                  <form id={`prices-${rt.id}`} onSubmit={(e) => save(e, rt)}>
+                <td className={cx(tdClass, 'w-px py-3 align-top')}>
+                  <form id={`prices-${rt.id}`} onSubmit={(e) => save(e, rt)} className="flex h-11 items-center">
                     <Button
                       type="submit"
                       size="sm"
@@ -259,7 +227,8 @@ function DrinkPrices({ drinks }) {
       revalidator.revalidate()
       toast({ title: 'Pris gemt', description: `${saved.name}, ${kr(saved.price)}` })
     } catch (err) {
-      setError({ ...err, drinkId: drink.id })
+      // Not a spread: an Error's message is not enumerable and would be lost
+      setError(Object.assign(err, { drinkId: drink.id }))
     }
   }
 
@@ -270,7 +239,7 @@ function DrinkPrices({ drinks }) {
           <tr>
             <th className={thClass}>Drink</th>
             <th className={thClass}>Kategori</th>
-            <th className={cx(thClass, 'text-right')}>Pris i kr.</th>
+            <th className={cx(thClass, 'text-right')}>Pris</th>
           </tr>
         </thead>
         <tbody>
@@ -290,6 +259,7 @@ function DrinkPrices({ drinks }) {
                         Pris for {d.name}
                       </label>
                       <input
+                        key={d.price}
                         id={id}
                         name="price"
                         type="number"
@@ -298,11 +268,12 @@ function DrinkPrices({ drinks }) {
                         inputMode="decimal"
                         required
                         defaultValue={d.price}
+                        onChange={() => err && setError(null)}
                         className={priceInputClass}
                         {...(err && { 'aria-invalid': true, 'aria-describedby': `${id}-error` })}
                       />
                       {err && (
-                        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm text-danger">
+                        <p id={`${id}-error`} role="alert" className={errorClass}>
                           {err.message}
                         </p>
                       )}
