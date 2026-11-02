@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLoaderData } from 'react-router'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { NavLink, Outlet, useLoaderData, useLocation, useNavigate } from 'react-router'
 import {
   BedIcon,
   CalendarDotsIcon,
@@ -8,11 +8,13 @@ import {
   CheckCircleIcon,
   HouseIcon,
   MagnifyingGlassIcon,
+  SignOutIcon,
   UserCircleIcon,
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
-import { Button, Kbd, cx, modKey } from './ui.jsx'
+import { api } from './api.js'
+import { Button, cx, modKey } from './ui.jsx'
 import BookingForm from './BookingForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
 
@@ -32,24 +34,31 @@ const NAV = [
       { to: '/bookinger', label: 'Bookinger', Icon: BedIcon, keywords: 'gæster' },
     ],
   },
-  { title: 'Bar', items: [{ to: '/barsalg', label: 'Kasse', Icon: CashRegisterIcon, keywords: 'barsalg drinks' }] },
   {
-    title: 'Økonomi',
-    items: [{ to: '/omsaetning', label: 'Omsætning', Icon: ChartLineUpIcon, keywords: 'indtjening' }],
-  },
-  {
-    title: 'Konto',
+    title: 'Bar og økonomi',
     items: [
-      { to: '/profil', label: 'Profil', Icon: UserCircleIcon, keywords: 'log ud adgangskode administration priser' },
+      { to: '/barsalg', label: 'Kasse', Icon: CashRegisterIcon, keywords: 'barsalg drinks' },
+      { to: '/omsaetning', label: 'Omsætning', Icon: ChartLineUpIcon, keywords: 'indtjening' },
     ],
   },
 ]
+// Reached from the account menu, not the nav, but still found by the command palette
+const PROFILE = { to: '/profil', label: 'Profil', Icon: UserCircleIcon, keywords: 'adgangskode administration priser' }
+
+const navItemClass = 'flex h-10 w-full items-center gap-3 rounded-lg px-3 transition-colors duration-100'
 
 // Also inside an open dialog: N must not stack the drawer on top of the delete confirmation
 const isTyping = (el) => el.closest('input, textarea, select, [contenteditable], dialog')
 
 export default function Shell() {
   const { username } = useLoaderData()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const main = useRef()
+  // <main> scrolls, not the window, so the router's scroll handling does not reach it: a new page starts at the top
+  useLayoutEffect(() => {
+    main.current.scrollTop = 0
+  }, [pathname])
   const [toastData, setToastData] = useState(null)
   const timer = useRef()
   // undefined = drawer closed, null = new booking, object = edit that booking
@@ -82,6 +91,16 @@ export default function Shell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [newBooking])
 
+  async function logout() {
+    try {
+      await api('/auth/logout', { method: 'POST' })
+    } catch (e) {
+      // 401: the session had already expired, so the user is logged out anyway
+      if (e.status !== 401) return toast({ title: e.message, tone: 'danger' })
+    }
+    navigate('/login')
+  }
+
   return (
     <ShellContext value={{ toast, newBooking, editBooking, openPalette }}>
       <div className="grid h-dvh grid-cols-[264px_1fr] overflow-hidden">
@@ -90,12 +109,11 @@ export default function Shell() {
           <button
             type="button"
             onClick={openPalette}
-            className="flex h-10 items-center gap-2.5 rounded-lg bg-surface px-3 text-ink-3 shadow-panel transition-colors duration-100 hover:text-ink-2"
+            className={cx(navItemClass, 'bg-surface text-ink-3 shadow-panel hover:text-ink-2')}
           >
             <MagnifyingGlassIcon size={17} />
             <span className="flex-1 text-left">Søg …</span>
-            <Kbd>{modKey}</Kbd>
-            <Kbd>K</Kbd>
+            <span className="text-sm text-ink-4">{modKey === '⌘' ? '⌘K' : 'Ctrl+K'}</span>
           </button>
           <nav className="-mx-1 mt-2 min-h-0 overflow-y-auto px-1">
             {NAV.map((group) => (
@@ -108,7 +126,7 @@ export default function Shell() {
                         to={to}
                         className={({ isActive }) =>
                           cx(
-                            'flex h-10 items-center gap-3 rounded-lg px-3 transition-colors duration-100',
+                            navItemClass,
                             isActive ? 'bg-ink/[0.07] font-medium text-ink' : 'text-ink-2 hover:bg-ink/[0.04]',
                           )
                         }
@@ -130,24 +148,14 @@ export default function Shell() {
               </div>
             ))}
           </nav>
-          <NavLink
-            to="/profil"
-            className="mt-auto flex h-12 items-center gap-3 rounded-lg px-3 text-sm text-ink-2 transition-colors duration-100 hover:bg-ink/[0.04]"
-          >
-            <span
-              aria-hidden
-              className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-xs font-semibold text-ink-2 uppercase shadow-panel"
-            >
-              {username.slice(0, 1)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium text-ink">{username}</span>
-              <span className="block text-xs text-ink-3">Profil og log ud</span>
-            </span>
-          </NavLink>
+          <AccountMenu username={username} onLogout={logout} />
         </aside>
 
-        <main className="my-2 mr-2 h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl bg-canvas shadow-canvas">
+        {/* relative: sr-only labels inside the page are positioned here, not on the document, so only <main> scrolls */}
+        <main
+          ref={main}
+          className="relative my-2 mr-2 h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl bg-canvas shadow-canvas"
+        >
           <div className="mx-auto max-w-[1280px] px-8 py-10">
             <Outlet />
           </div>
@@ -158,7 +166,10 @@ export default function Shell() {
 
       {paletteOpen && (
         <CommandPalette
-          pages={NAV.flatMap((g) => g.items.map((item) => ({ ...item, group: g.title })))}
+          pages={[
+            ...NAV.flatMap((g) => g.items.map((item) => ({ ...item, group: g.title }))),
+            { ...PROFILE, group: 'Konto' },
+          ]}
           newBooking={newBooking}
           onClose={() => setPaletteOpen(false)}
         />
@@ -190,5 +201,41 @@ export default function Shell() {
         )}
       </div>
     </ShellContext>
+  )
+}
+
+// The menu opens upwards from the account. Native popover: light dismiss and Escape come from the browser
+function AccountMenu({ username, onLogout }) {
+  const close = (e) => e.currentTarget.closest('[popover]').hidePopover()
+  return (
+    <div className="mt-auto">
+      <button
+        type="button"
+        popoverTarget="account-menu"
+        className={cx(navItemClass, 'h-12 bg-surface text-ink shadow-panel hover:bg-surface/70')}
+      >
+        <span
+          aria-hidden
+          className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-xs font-semibold text-ink-2 uppercase"
+        >
+          {username.slice(0, 1)}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left">{username}</span>
+      </button>
+      <div
+        id="account-menu"
+        popover="auto"
+        className="fixed inset-auto bottom-[76px] left-4 m-0 w-[232px] rounded-lg border-0 bg-surface p-1 text-ink shadow-pop"
+      >
+        <NavLink to="/profil" onClick={close} className={cx(navItemClass, 'text-ink-2 hover:bg-ink/[0.04]')}>
+          <UserCircleIcon size={20} className="text-ink-3" />
+          Profil
+        </NavLink>
+        <button type="button" onClick={onLogout} className={cx(navItemClass, 'text-ink-2 hover:bg-ink/[0.04]')}>
+          <SignOutIcon size={20} className="text-ink-3" />
+          Log ud
+        </button>
+      </div>
+    </div>
   )
 }

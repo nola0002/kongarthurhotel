@@ -33,7 +33,6 @@ export default function Login() {
           <div>
             <p className="text-xl font-semibold tracking-[-0.02em]">Kong Arthur</p>
             <h1 className="mt-6 text-3xl font-semibold tracking-[-0.03em]">Log ind</h1>
-            <p className="mt-2 text-ink-2">Back office til receptionen.</p>
           </div>
           <ErrorBanner error={error} />
           <div>
@@ -92,7 +91,6 @@ export default function Login() {
         />
         <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink/75 via-ink/30 to-transparent px-10 pt-32 pb-10 text-white">
           <p className="text-2xl font-semibold tracking-[-0.02em]">Hotel Kong Arthur · København</p>
-          <p className="mt-1 text-white/80">Ved søerne i hjertet af København.</p>
         </div>
       </div>
     </div>
