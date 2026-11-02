@@ -1,10 +1,10 @@
 import { Link, useLoaderData, useNavigate } from 'react-router'
-import { PlusIcon, SignInIcon, SignOutIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import { PlusIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { api } from '../api.js'
 import { addDays, guestName, kr, longDate, nightsLabel, num, pct } from '../format.js'
 import { useStayActions } from '../SatisfactionDialog.jsx'
 import { useShell } from '../Shell.jsx'
-import { Button, ButtonLink, DateNav, EmptyState, Field, Kbd, PageHeader, Stat, StatusBadge, Tile, cx } from '../ui.jsx'
+import { Button, DateNav, EmptyState, Field, Kbd, PageHeader, Stat, StatusBadge, Tile, cx } from '../ui.jsx'
 
 // The date is only sent when it is in the URL, so "today" is always the server's date (research R11)
 export function loader({ request }) {
@@ -35,7 +35,7 @@ export default function Overview() {
               prevTo={'?dato=' + addDays(date, -1)}
               todayTo="/oversigt"
               nextTo={'?dato=' + addDays(date, 1)}
-              onChange={(d) => navigate('?dato=' + d)}
+              onChange={(d) => navigate('?dato=' + d, { replace: true })}
             />
             <Button variant="primary" onClick={newBooking}>
               <PlusIcon size={16} weight="bold" />
@@ -58,23 +58,24 @@ export default function Overview() {
           <Stat
             label="Ankomster tilbage"
             value={num(kpis.arrivals.remaining)}
-            context={`af ${num(kpis.arrivals.total)} ankomster`}
+            context={`af ${num(kpis.arrivals.total)}`}
           />
         </Tile>
         <Tile>
           <Stat
             label="Afrejser tilbage"
             value={num(kpis.departures.remaining)}
-            context={`af ${num(kpis.departures.total)} afrejser`}
+            context={`af ${num(kpis.departures.total)}`}
           />
         </Tile>
         <Tile>
-          <Stat label="Gns. pris pr. nat" value={kr(kpis.averageRate)} context="for nattens ophold" />
+          <Stat label="Gns. pris pr. nat" value={kr(kpis.averageRate)} />
         </Tile>
       </div>
 
-      <div className="grid grid-cols-12 items-start gap-5">
-        <div className="col-span-8 space-y-5">
+      {/* The side column needs 20rem next to a table without wrapped text; on narrower screens it moves below the lists */}
+      <div className="grid items-start gap-5 min-[1400px]:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-5">
           <Tile title="Ankomster" count={num(arrivals.length)} flush>
             <BookingTable
               bookings={arrivals}
@@ -82,7 +83,6 @@ export default function Overview() {
               action={(b) =>
                 b.status === 'arriving' && (
                   <ActionButton pending={stay.pending === b.id} onClick={() => stay.run(b, 'check-in')}>
-                    <SignInIcon size={16} className="text-ink-3" />
                     Tjek ind
                   </ActionButton>
                 )
@@ -96,14 +96,13 @@ export default function Overview() {
               action={(b) =>
                 b.status === 'departing' ? (
                   <ActionButton pending={stay.pending === b.id} onClick={() => stay.run(b, 'check-out')}>
-                    <SignOutIcon size={16} className="text-ink-3" />
                     Tjek ud
                   </ActionButton>
                 ) : b.satisfactionScore != null ? (
-                  <span className="tnum text-sm text-ink-2">Tilfredshed {b.satisfactionScore} af 5</span>
+                  <span className="tnum text-sm whitespace-nowrap text-ink-3">{b.satisfactionScore} af 5</span>
                 ) : (
                   ['checked_out', 'departed'].includes(b.status) && (
-                    <ActionButton onClick={() => stay.rate(b)}>Registrér tilfredshed</ActionButton>
+                    <ActionButton onClick={() => stay.rate(b)}>Tilfredshed</ActionButton>
                   )
                 )
               }
@@ -111,22 +110,13 @@ export default function Overview() {
           </Tile>
         </div>
 
-        <div className="col-span-4 space-y-5">
-          <Tile title="I huset i nat">
+        <div className="grid grid-cols-2 items-start gap-5 min-[1400px]:grid-cols-1">
+          <Tile title="I huset">
             <dl className="divide-y divide-line">
               <Field label="Bookinger">{num(inHouse.bookings)}</Field>
               <Field label="Gæster">{num(inHouse.guests)}</Field>
+              <Field label="Barsalg">{kr(barSalesTotal)}</Field>
             </dl>
-          </Tile>
-          <Tile
-            title="Barsalg"
-            action={
-              <ButtonLink to="/barsalg" size="sm">
-                Åbn kassen
-              </ButtonLink>
-            }
-          >
-            <Stat label="Salg på datoen" value={kr(barSalesTotal)} />
           </Tile>
           <Tile title="Ledige værelser">
             <dl className="divide-y divide-line">
@@ -135,7 +125,7 @@ export default function Overview() {
                   {r.free === 0 ? (
                     <span className="text-danger-ink">Udsolgt</span>
                   ) : (
-                    `${num(r.free)} ledige af ${num(r.total)}`
+                    `${num(r.free)} af ${num(r.total)}`
                   )}
                 </Field>
               ))}
@@ -174,8 +164,6 @@ function BookingTable({ bookings, empty, action }) {
         <tr>
           <th className={cx(th, 'pl-6')}>Gæst</th>
           <th className={th}>Værelse</th>
-          <th className={th}>Nætter</th>
-          <th className={cx(th, 'text-right')}>Gæster</th>
           <th className={th}>Status</th>
           <th className={cx(th, 'pr-6')}>
             <span className="sr-only">Handling</span>
@@ -197,15 +185,15 @@ function BookingTable({ bookings, empty, action }) {
               >
                 {guestName(b)}
               </Link>
-              <div className="text-sm text-ink-3">{b.country.name}</div>
+              <div className="tnum text-sm whitespace-nowrap text-ink-3">
+                {b.country.name} · {nightsLabel(b.nights)}
+              </div>
             </td>
             <td className={td}>
               <div className="tnum">{b.room.number}</div>
-              <div className="text-sm text-ink-3">{b.roomType.name}</div>
+              <div className="text-sm whitespace-nowrap text-ink-3">{b.roomType.name}</div>
             </td>
-            <td className={cx(td, 'tnum')}>{nightsLabel(b.nights)}</td>
-            <td className={cx(td, 'tnum text-right')}>{num(b.guestCount)}</td>
-            <td className={td}>
+            <td className={cx(td, 'whitespace-nowrap')}>
               <StatusBadge status={b.status} />
             </td>
             <td className={cx(td, 'pr-6 text-right')}>{action(b)}</td>

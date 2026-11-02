@@ -209,7 +209,8 @@ export function DateNav({ label, value, prevTo, todayTo, nextTo, onChange }) {
         value={draft}
         onChange={(e) => {
           setDraft(e.target.value)
-          if (e.target.value) onChange(e.target.value)
+          // Typing the year digit by digit passes 0002, 0020 and 0202 first; only a four-digit year loads a page
+          if (e.target.value >= '1000') onChange(e.target.value)
         }}
         className={cx(inputClass, 'w-auto')}
       />

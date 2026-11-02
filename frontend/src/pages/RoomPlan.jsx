@@ -23,10 +23,13 @@ export default function RoomPlan() {
   const [, setParams] = useSearchParams()
   const loading = useNavigation().state === 'loading'
   const setParam = (key, value) =>
-    setParams((p) => {
-      p.set(key, value)
-      return p
-    })
+    setParams(
+      (p) => {
+        p.set(key, value)
+        return p
+      },
+      { replace: true },
+    )
   // Up to 214 rooms × 31 days ≈ 6,600 cells, drawn as a plain table without virtualisation (research R5).
   // Built once per answer, so the loading state does not redraw them.
   const body = useMemo(() => planRows(plan), [plan])
@@ -75,13 +78,13 @@ export default function RoomPlan() {
       </ul>
 
       <Tile flush>
-        <div
-          className={cx(
-            'max-h-[calc(100dvh-16rem)] overflow-auto rounded-2xl transition-opacity duration-100',
-            loading && 'opacity-60',
-          )}
-        >
-          <table className="w-full table-fixed border-separate border-spacing-0">
+        {/* No opacity transition: Chrome can leave the new cells unpainted until the mouse moves */}
+        <div className={cx('max-h-[calc(100dvh-16rem)] overflow-auto rounded-2xl', loading && 'opacity-60')}>
+          {/* Day columns share the width left after the room column, but never get narrower than 2.75rem */}
+          <table
+            style={{ minWidth: `calc(7rem + ${days} * 2.75rem)` }}
+            className="w-full table-fixed border-separate border-spacing-0"
+          >
             <thead>
               <tr>
                 <th className="sticky top-0 left-0 z-30 w-28 border-b border-line bg-surface px-6 text-left text-sm font-medium text-ink-3">
@@ -91,7 +94,7 @@ export default function RoomPlan() {
                   <th
                     key={d}
                     className={cx(
-                      'sticky top-0 z-20 h-14 w-11 border-b border-l border-line text-center text-xs font-medium',
+                      'sticky top-0 z-20 h-14 border-b border-l border-line text-center text-xs font-medium',
                       d === today() ? 'bg-sunken text-ink' : 'bg-surface text-ink-3',
                     )}
                   >
@@ -130,7 +133,7 @@ function planRows({ from, to, dates, roomTypes, stays }) {
             aria-label={label}
             title={label}
             className={cx(
-              'flex h-8 items-center gap-1.5 rounded-md px-2 text-sm hover:brightness-95',
+              '@container flex h-8 items-center gap-1.5 rounded-md px-2 text-sm hover:brightness-95',
               STATUS[s.status].pill,
               // No rounded edge where the stay continues outside the window (FR-006)
               s.checkIn < from && 'rounded-l-none',
@@ -138,7 +141,8 @@ function planRows({ from, to, dates, roomTypes, stays }) {
             )}
           >
             <StatusMarker status={s.status} />
-            <span className="truncate">{guestName(s)}</span>
+            {/* A one-night bar in the 31-day view only fits the marker; the name stays in aria-label and title */}
+            <span className="truncate @max-[3.5rem]:hidden">{guestName(s)}</span>
           </Link>
         </td>,
       )
