@@ -239,6 +239,19 @@ læsning afvises det med `401`.
 
 ---
 
+## Phase 9: Ændring af data – historik fra 2000, lande og sæsoner (Session 2026-11-02)
+
+**Goal**: Data fra 2000 med virkelighedens begivenheder, 44 lande, en kortere mellemsæson og
+forskellig profil for cocktails og kaffe (spec FR-003, FR-005, FR-009, FR-012, FR-016).
+
+- [X] T039 FR-003: Nye sæsonperioder i `yearPeriods` (lav jan–mar og 1. nov–19. dec, mellem apr–maj og sep–okt, høj jun–aug og 20.–31. dec) for 2000–2027 i `backend/scripts/generate-seed.js`.
+- [X] T040 FR-005: `countryWeights` med 44 lande (vægt i 2000 og 2025) og `countryFactor` med begivenheder pr. land (Rusland, Ukraine, Kina, USA/Canada, Covid-19).
+- [X] T041 FR-009, FR-016: Belægning pr. dag = sæsonens belægning × `DEMAND_BY_YEAR` × `DEMAND_EVENTS`. Generatoren starter et ophold på en ledig dag med en sandsynlighed, der giver den belægning. Historiske priser = prislisten × `PRICE_INDEX`.
+- [X] T042 FR-012: Barsalg følger antal gæster i huset og kategoriens sæsonprofil. Kaffe kl. 7–16, cocktails kl. 16–23. Før 2025 én dagstotal pr. drink med årets pris.
+- [X] T043 SC-004: Selvtjek i generatoren: belægning 2025 er 65–80 %, høj > mellem > lav i omsætning i hvert år uden Covid, 2020 under halvdelen af 2019, 2009 under 2007, færre russiske gæster efter 2022, og 2025 er stadig præcis "Units Sold".
+- [X] T044 Opdatér `README.md` § Testdata, `docs/tableau-guide.md` og `specs/002-bi-dashboard/quickstart.md` F5 med 44 lande og perioden fra 2000.
+- [ ] T045 Kør `docker compose down -v && docker compose up --build`, opdatér Tableau-extractet, og tjek trends pr. år i dashboardet.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

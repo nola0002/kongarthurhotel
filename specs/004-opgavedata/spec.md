@@ -43,6 +43,31 @@ de skal bekræftes ved næste gennemgang.
   hotellets egne bookinger, og hotellet booker i dag via sit bookingsystem. De genererede
   bookinger har kilden "Back office" *(gruppens valg)*.
 
+### Session 2026-11-02
+
+Brugerens ændringer af de eksisterende data: flere lande, mellemsæson må ikke tjene mere end
+højsæson, cocktails og kaffe skal kunne skelnes, og data skal gå tilbage til 2000 med
+virkelighedens begivenheder, så dashboardet viser en udvikling i salg og økonomi.
+
+- Q: Skal der være flere lande end opgavens 20? → A: Ja. 44 lande inkl. Danmark og nabolandene,
+  vægtet efter hotellets markeder, og hvert land følger sine egne begivenheder (brugeren).
+- Q: Mellemsæson tjente 43 mio. kr. og højsæson 33 mio. kr. i 2025, fordi mellemsæson var 183
+  dage. Hvordan rettes det? → A: Kortere mellemsæson: Lavsæson er januar–marts og
+  1. november–19. december, Mellemsæson april–maj og september–oktober, Højsæson juni–august og
+  20.–31. december. Belægningen er ca. 55/72/88 % i et normalt år, så omsætningen er højsæson >
+  mellemsæson > lavsæson (brugeren). Erstatter månedsgrænserne fra 2026-10-30.
+- Q: Hvordan gemmes barsalget før 2025? → A: Som én dagstotal pr. drink, fordi enkeltsalg fra
+  2000 ville give ca. 2 mio. rækker. 2025–2026 er stadig enkeltsalg på 1–4 enheder (brugeren).
+- Q: Hvordan kan man skelne cocktails og kaffe? → A: Kategorien findes allerede
+  (`drink_categories`, `category` i barsalget og andelen pr. kategori i nøgletallene). Data får
+  nu forskellig profil: kaffe sælges om dagen og mest om vinteren, cocktails om aftenen og mest
+  om sommeren *(gruppens valg)*.
+- Q: Hvilke begivenheder følger data? → A: Dot-com-krakket og 9/11 (2001–2003), Irakkrigen og
+  SARS (2003), finanskrisen (2008–2009), COP15 (december 2009), Eurovision (maj 2014), Krim og
+  rublens fald (Rusland fra 2014), Covid-19 (marts 2020–februar 2022, kinesiske gæster til
+  2023) og krigen i Ukraine (russiske gæster forsvinder, og inflationen hæver priserne 2022–2023)
+  *(gruppens valg af tal)*.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Opgavens hotel: værelser, typer, priser og sæsoner (Priority: P1)
@@ -229,14 +254,14 @@ tre, og med nøglen afvises læsning.
   af kapaciteten over alle 214 værelser MUST være præcis 428 gæster.
 - **FR-003** (KB-T7): Systemet MUST have tre sæsoner: Lavsæson (vintermånederne), Mellemsæson
   (forår og efterår) og Højsæson (sommer og jul). Hvert år MUST inddeles sådan: Lavsæson
-  1. januar–udgangen af februar og 1.–19. december, Mellemsæson 1. marts–31. maj og
-  1. september–30. november, Højsæson 1. juni–31. august og 20.–31. december.
-  Sæsonperioderne MUST dække hver dag fra 2025-01-01 til 2027-12-31 præcis én gang.
+  1. januar–31. marts og 1. november–19. december, Mellemsæson 1. april–31. maj og
+  1. september–31. oktober, Højsæson 1. juni–31. august og 20.–31. december.
+  Sæsonperioderne MUST dække hver dag fra 2000-01-01 til 2027-12-31 præcis én gang.
 - **FR-004** (KB-T7, FR8): Prisen pr. nat for hver værelsestype MUST være opgavens laveste
   pris i lavsæson, opgavens højeste pris i højsæson og midtpunktet afrundet til nærmeste 50 kr.
   i mellemsæson.
-- **FR-005** (FT6, FT8): Landelisten MUST være præcis de 20 lande, der forekommer i opgavens
-  bookingdata, med danske navne.
+- **FR-005** (FT6, FT8): Landelisten MUST indeholde de 20 lande, der forekommer i opgavens
+  bookingdata, og hotellets øvrige markeder (i alt 44 lande inkl. Danmark), med danske navne.
 - **FR-006** (FR1, 1NF): En booking MUST registrere gæstens fornavn og efternavn som to
   separate, påkrævede oplysninger. Et navn, der kun består af mellemrum, MUST afvises. Navnet
   MUST vises som "fornavn efternavn" i lister, detaljer, bekræftelser og ved barsalg.
@@ -247,18 +272,21 @@ tre, og med nøglen afvises læsning.
   ("Days Rented") og samlet pris ("Price"), der gemmes som fastfrosset pris. Hver booking MUST
   ligge i 2025 med alle nætter i rækkens sæson og på et ledigt værelse af typen, og den MUST
   have kilden "Bookingsystem". Det ødelagte tegn i "Müller" gemmes som "ü".
-- **FR-009**: Øvrige bookinger i startdata MUST dække perioden 2025-01-01 til 2027-02-28 med
-  navne og lande fra opgavens data, 1–10 nætter pr. ophold og en samlet belægning på 65–80 %,
-  højest i højsæson. Deres priser MUST beregnes efter prislisten.
+- **FR-009**: Øvrige bookinger i startdata MUST dække perioden 2000-01-01 til 2027-02-28 med
+  navne fra opgavens data, lande efter FR-005 og 1–10 nætter pr. ophold. Belægningen i 2025
+  MUST være 65–80 %, og værelsesomsætningen MUST i hvert år uden Covid-19 være højest i
+  højsæson og lavest i lavsæson. Priser fra 2025 MUST beregnes efter prislisten.
 - **FR-010** (FR6): Antal gæster på hver booking i startdata MUST ligge mellem 1 og
   værelsestypens kapacitet. Intet værelse må have overlappende bookinger (FR7).
 - **FR-011** (FR9, FT14, FT15): Drinkkortet MUST være præcis opgavens 30 drinks med opgavens
   navne og priser i kr. og øre: 20 i kategorien "Cocktail" og 10 i kategorien "Kaffe".
 - **FR-012** (FT13–FT15): Barsalg i startdata MUST for kalenderåret 2025 give præcis opgavens
-  "Units Sold" pr. drink. Fra 2026-01-01 til og med 2026-11-05 MUST salget følge samme
-  fordeling og tempo, og der MUST NOT være salg efter 2026-11-05. Et salg MUST have 1–4
-  enheder, og et salg, der er knyttet til en booking, MUST ligge på en dato, hvor gæsten bor
-  på hotellet.
+  "Units Sold" pr. drink. Fra 2026-01-01 til og med 2026-11-05 og tilbage til 2000 MUST salget
+  følge antallet af gæster med samme salg pr. gæst som 2025, og der MUST NOT være salg efter
+  2026-11-05. Fra 2025 MUST et salg have 1–4 enheder. Før 2025 er et salg én dagstotal pr.
+  drink uden booking. Et salg, der er knyttet til en booking, MUST ligge på en dato, hvor gæsten
+  bor på hotellet. Kaffe MUST sælges kl. 7–16 og mest i lavsæson, cocktails kl. 16–23 og mest i
+  højsæson.
 - **FR-013** (KB-T10, spec 001 FR-013): Hotellets bookingsystem MUST kunne oprette, ændre og
   slette bookinger med sin egen nøgle og MUST NOT kunne læse eller ændre andet. Det gælder alle
   bookinger, også dem, der er oprettet i back office. Ændringer valideres efter samme regler
@@ -267,6 +295,11 @@ tre, og med nøglen afvises læsning.
   genskabes deterministisk fra dem. Startdata MUST NOT redigeres i hånden.
 - **FR-015** (KB-T3, KB-T4): Hele systemet MUST stadig starte med én kommando fra en tom
   maskine og være klar til brug med de nye startdata.
+- **FR-016** (FT5–FT10, FT13): Startdata fra 2000 til 2024 MUST følge virkelighedens
+  begivenheder (se Session 2026-11-02): belægningen falder ved dot-com-krakket, finanskrisen og
+  Covid-19, landene følger deres egne begivenheder, og priserne for værelser og drinks følger et
+  prisindeks pr. år (2025 = 1). Historiske priser gemmes som fastfrosne priser (FR-009,
+  FR-010), og prislisten er uændret.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -274,7 +307,7 @@ tre, og med nøglen afvises læsning.
 - **Værelse**: Værelsesnummer pr. etage. Tilhører én værelsestype.
 - **Sæson og sæsonperiode**: Lav-, mellem- og højsæson med datoperioder, inkl. julehøjsæson.
 - **Pris**: Pris pr. nat for en værelsestype i en sæson.
-- **Land**: De 20 lande fra opgavens data med ISO-kode og dansk navn.
+- **Land**: 44 lande inkl. de 20 fra opgavens data, med ISO-kode og dansk navn.
 - **Booking**: Som i spec 001, men gæsten har fornavn og efternavn i stedet for ét navn.
 - **Drink og drinkkategori**: Opgavens 30 drinks i kategorierne Cocktail og Kaffe.
 - **Barsalg**: Som i spec 001. Alle salg er Helene Christines.
@@ -286,14 +319,14 @@ tre, og med nøglen afvises læsning.
 ### Measurable Outcomes
 
 - **SC-001**: En optælling efter start fra tom database giver 214 værelser, 8 værelsestyper,
-  428 i samlet kapacitet, 3 sæsoner, 20 lande og 30 drinks (20 cocktails, 10 kaffe). 0
+  428 i samlet kapacitet, 3 sæsoner, 44 lande og 30 drinks (20 cocktails, 10 kaffe). 0
   afvigelser fra opgaven.
 - **SC-002**: 1000 af 1000 CSV-rækker genfindes én-til-én med samme fornavn, efternavn, land,
   værelsestype, antal nætter, sæson og pris.
 - **SC-003**: Solgte enheder i 2025 matcher opgavens "Units Sold" for 30 af 30 drinks, i alt
   179.958 enheder.
-- **SC-004**: Startdata har 0 overlappende bookinger pr. værelse og en samlet belægning på
-  65–80 % med højsæson som den højeste.
+- **SC-004**: Startdata har 0 overlappende bookinger pr. værelse, en belægning i 2025 på
+  65–80 %, og værelsesomsætningen er højsæson > mellemsæson > lavsæson i hvert år uden Covid-19.
 - **SC-005**: Systemet er klar til brug under 3 minutter efter start fra tom database på en
   almindelig udviklermaskine.
 - **SC-006**: En receptionist kan finde en booking fra opgavens data på fornavn og efternavn på
@@ -314,7 +347,8 @@ tre, og med nøglen afvises læsning.
 - Opgaven angiver ikke en etageplan eller fordelingen af værelser på typer. Gruppen vælger en
   fordeling, der opfylder 214 værelser og 428 gæster.
 - Helene Christine er den eneste bartender, så barsalg registreres ikke pr. medarbejder.
-- Danske gæster og andre lande end de 20 i opgavens data forekommer ikke.
+- Historikken fra 2000 er genereret ud fra virkelighedens begivenheder. Tallene er gruppens
+  skøn og ikke hotellets egne regnskaber.
 - Kundetilfredshed, receptionsoverblik og belægningsplan hører til feature 003, som bygger på
   denne feature.
 - Testenes egne små fixtures (fx et land "DK" i API-testene) er testdata og behøver ikke

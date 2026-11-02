@@ -138,6 +138,9 @@ Fordeling i CSV-filen: sæson low 332, mid 335, high 333. Værelsestype fra 103 
 
 ## R6. Sæsoner og julehøjsæson
 
+> **Ændret 2026-11-02:** Erstattet af spec 004 Session 2026-11-02 (FR-003, FR-005, FR-009,
+> FR-012, FR-016) og tasks T039–T043. Teksten nedenfor er den oprindelige beslutning.
+
 - **Beslutning**: Hvert år inddeles efter de danske meteorologiske årstider plus jul:
 
   | Sæson | Perioder pr. år | Dage (2025) |
@@ -199,6 +202,9 @@ Fordeling i CSV-filen: sæson low 332, mid 335, high 333. Værelsestype fra 103 
   forskellige priser). Udlede prislisten af CSV-gennemsnit (afviger fra opgavens tekst).
 
 ## R8. Lande
+
+> **Ændret 2026-11-02:** Erstattet af spec 004 Session 2026-11-02 (FR-003, FR-005, FR-009,
+> FR-012, FR-016) og tasks T039–T043. Teksten nedenfor er den oprindelige beslutning.
 
 - **Beslutning**: `countries` indeholder præcis de 20 lande fra CSV-filen. Oversættelsen fra
   CSV-navn til ISO 3166-1 alpha-2 står som en fast tabel i generatoren. Det danske navn kommer
@@ -274,6 +280,9 @@ Fordeling i CSV-filen: sæson low 332, mid 335, high 333. Værelsestype fra 103 
 
 ## R11. Øvrige bookinger
 
+> **Ændret 2026-11-02:** Erstattet af spec 004 Session 2026-11-02 (FR-003, FR-005, FR-009,
+> FR-012, FR-016) og tasks T039–T043. Teksten nedenfor er den oprindelige beslutning.
+
 - **Beslutning**: Generatoren fylder hvert værelse fra 2025-01-01 til 2027-02-28 som i 001,
   men uden om de importerede bookinger:
   - Ophold: 1–10 nætter jævnt fordelt (som CSV-filen). Fornavn, efternavn og land vælges
@@ -291,6 +300,9 @@ Fordeling i CSV-filen: sæson low 332, mid 335, high 333. Værelsestype fra 103 
 - **Alternativer**: 1–7 nætter som i 001 (afviger fra opgavens fordeling).
 
 ## R12. Drinks og barsalg
+
+> **Ændret 2026-11-02:** Erstattet af spec 004 Session 2026-11-02 (FR-003, FR-005, FR-009,
+> FR-012, FR-016) og tasks T039–T043. Teksten nedenfor er den oprindelige beslutning.
 
 - **Beslutning**:
   - `drink_categories`: 1 Cocktail, 2 Kaffe (CSV "Coffee" → "Kaffe", dansk UI).
@@ -330,6 +342,9 @@ Fordeling i CSV-filen: sæson low 332, mid 335, high 333. Værelsestype fra 103 
   regel). Kun bookinger med `source = booking_system` (opgaven begrænser det ikke).
 
 ## R14. Seedens størrelse og opstartstid
+
+> **Ændret 2026-11-02:** Erstattet af spec 004 Session 2026-11-02 (FR-003, FR-005, FR-009,
+> FR-012, FR-016) og tasks T039–T043. Teksten nedenfor er den oprindelige beslutning.
 
 - **Skøn**: 214 værelser, ca. 21.600 bookinger og ca. 133.000 barsalg. `02_seed.sql` bliver
   ca. 10 MB (i dag ca. 2 MB). Rækkerne indsættes stadig 1000 pr. `INSERT`, så hver statement
