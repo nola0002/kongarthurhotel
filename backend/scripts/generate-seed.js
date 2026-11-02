@@ -6,7 +6,8 @@ import assert from 'node:assert/strict'
 import { calculateStayPrice } from '../src/services/pricing.js'
 import { toKr, toOre } from '../src/money.js'
 
-const SEED_START = '2025-01-01'
+// From 2000, so the dashboard shows 25 years of trends through real crises (004 FR-016)
+const SEED_START = '2000-01-01'
 const SEED_END = '2027-02-28'
 const SEED_SALES_END = '2026-11-05' // the day before the presentation: no sales and no booking created in the future
 // Scores only up to the first day the seed is used, so no guest has a score before the departure day (003 FR-011, T047)
@@ -29,6 +30,7 @@ const DAY_MS = 86_400_000
 const toMs = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`)
 const addDays = (isoDate, days) => new Date(toMs(isoDate) + days * DAY_MS).toISOString().slice(0, 10)
 const daysBetween = (from, to) => (toMs(to) - toMs(from)) / DAY_MS
+const yearOf = (isoDate) => Number(isoDate.slice(0, 4))
 
 // The source files have no quotes and no commas inside fields, so two splits are enough (004 research R2)
 function readSourceCsv(fileName, columnCount) {
@@ -59,7 +61,7 @@ function insert(table, columns, rows) {
   }
 }
 
-// --- Countries: exactly the 20 in the booking file (004 FR-005, research R8) ---
+// --- Countries: the 20 in the booking file plus the hotel's other markets (004 FR-005, research R8) ---
 // A fixed table: a reverse lookup via Intl.DisplayNames('en') gives outdated codes (France → FX, Russia → SU)
 const countryCodeByCsvName = {
   Australia: 'AU',
@@ -83,8 +85,24 @@ const countryCodeByCsvName = {
   'United States': 'US',
   Vietnam: 'VN',
 }
+// Share of the generated guests in 2000 and in 2025; years in between are interpolated, later years use 2025.
+// Rough shape of Copenhagen hotel nights: Danes and neighbours first, Asia growing. Events are in countryFactor.
+// prettier-ignore
+const countryWeights = {
+  DK: [22, 18], DE: [11, 10], SE: [9, 7], NO: [9, 7], GB: [7, 7], US: [7, 8], NL: [3, 3], IT: [3, 3], FR: [3, 3],
+  ES: [2.5, 3], CH: [2, 2], PL: [0.5, 2], FI: [2, 2], AT: [1.2, 1.2], BE: [1.2, 1.2], IE: [0.8, 1], IS: [0.8, 0.5],
+  PT: [0.6, 0.8], GR: [0.5, 0.5], CZ: [0.4, 0.6], EE: [0.2, 0.4], LT: [0.2, 0.4], UA: [0.3, 0.5], RU: [1, 2],
+  TR: [0.4, 0.6], IL: [0.5, 0.6], AE: [0.1, 0.5], CN: [0.2, 2.5], JP: [1.5, 1.2], KR: [0.3, 1], IN: [0.4, 1.2],
+  SG: [0.3, 0.5], TH: [0.2, 0.4], VN: [0.05, 0.3], PK: [0.1, 0.2], AU: [0.8, 1], NZ: [0.2, 0.3], CA: [1, 1],
+  MX: [0.2, 0.4], BR: [0.3, 0.6], AR: [0.2, 0.3], ZA: [0.3, 0.3], EG: [0.1, 0.2], NG: [0.1, 0.2],
+}
+// prettier-ignore
+const EUROPE = new Set([
+  'DK', 'DE', 'SE', 'NO', 'GB', 'NL', 'IT', 'FR', 'ES', 'CH', 'PL', 'FI', 'AT', 'BE', 'IE', 'IS', 'PT', 'GR', 'CZ', 'EE',
+  'LT', 'UA', 'RU',
+])
 const regionNames = new Intl.DisplayNames('da', { type: 'region' })
-const countries = Object.values(countryCodeByCsvName).map((code) => ({ code, name: regionNames.of(code) }))
+const countries = Object.keys(countryWeights).map((code) => ({ code, name: regionNames.of(code) }))
 insert(
   'countries',
   ['code', 'name'],
@@ -136,17 +154,18 @@ insert(
   seasons.map((s) => [s.id, s.name]),
 )
 
-// Low is winter, mid is spring and autumn, high is summer and Christmas 20–31 December (004 FR-003, research R6).
-// The last day of February is the day before 1 March, so leap years work too.
+// Low is winter (January–March, November–19 December), mid is April–May and September–October, high is summer and
+// Christmas 20–31 December (004 FR-003, research R6). Mid is 122 days, not 183, so it no longer earns more than high.
 const yearPeriods = (year) => [
-  [1, `${year}-01-01`, addDays(`${year}-03-01`, -1)],
-  [2, `${year}-03-01`, `${year}-05-31`],
+  [1, `${year}-01-01`, `${year}-03-31`],
+  [2, `${year}-04-01`, `${year}-05-31`],
   [3, `${year}-06-01`, `${year}-08-31`],
-  [2, `${year}-09-01`, `${year}-11-30`],
-  [1, `${year}-12-01`, `${year}-12-19`],
+  [2, `${year}-09-01`, `${year}-10-31`],
+  [1, `${year}-11-01`, `${year}-12-19`],
   [3, `${year}-12-20`, `${year}-12-31`],
 ]
-const periods = [2025, 2026, 2027].flatMap(yearPeriods).map(([seasonId, startDate, endDate]) => ({
+const SEED_YEARS = Array.from({ length: 2027 - 2000 + 1 }, (_, i) => 2000 + i)
+const periods = SEED_YEARS.flatMap(yearPeriods).map(([seasonId, startDate, endDate]) => ({
   seasonId,
   seasonName: seasons[seasonId - 1].name,
   startDate,
@@ -157,7 +176,12 @@ insert(
   ['season_id', 'start_date', 'end_date'],
   periods.map((p) => [p.seasonId, p.startDate, p.endDate]),
 )
-const periodOn = (isoDate) => periods.find((p) => p.startDate <= isoDate && isoDate <= p.endDate)
+// A map, not periods.find: the generator looks up ~10,000 days millions of times
+const periodByDay = new Map()
+for (const p of periods) {
+  for (let day = p.startDate; day <= p.endDate; day = addDays(day, 1)) periodByDay.set(day, p)
+}
+const periodOn = (isoDate) => periodByDay.get(isoDate)
 
 // Low = the assignment's lowest price, high = its highest, mid = the midpoint (004 FR-004, research R7).
 // The booking file's prices per night vary per row and partly lie outside these ranges; the list follows the
@@ -180,6 +204,67 @@ insert(
 const pricesOreByRoomType = new Map(
   roomTypes.map((t) => [t.id, new Map(seasons.map((s) => [s.id, toOre(String(pricesKr[t.id][s.id - 1]))]))]),
 )
+
+// --- History 2000–2024: demand and prices follow real events, so the dashboard shows trends (004 FR-016) ---
+// Occupancy in a normal year (2025) per season; high > mid > low, also in revenue (004 FR-009)
+const SEASON_OCCUPANCY = { 1: 0.55, 2: 0.72, 3: 0.88 }
+// Demand per year relative to 2025: the dot-com crash, the financial crisis, steady growth, the war in Ukraine
+// (energy prices and closed airspace); Covid-19 is in DEMAND_EVENTS, because it hit by month
+// prettier-ignore
+const DEMAND_BY_YEAR = {
+  2000: 0.9, 2001: 0.84, 2002: 0.79, 2003: 0.78, 2004: 0.82, 2005: 0.85, 2006: 0.89, 2007: 0.92, 2008: 0.91,
+  2009: 0.78, 2010: 0.82, 2011: 0.85, 2012: 0.86, 2013: 0.89, 2014: 0.93, 2015: 0.95, 2016: 0.97, 2017: 0.98,
+  2018: 1.0, 2019: 1.03, 2020: 1.0, 2021: 1.0, 2022: 0.9, 2023: 0.96, 2024: 0.99,
+}
+const DEMAND_EVENTS = [
+  ['2001-09-11', '2002-03-31', 0.85], // 9/11: transatlantic and business travel stops
+  ['2003-03-20', '2003-06-30', 0.88], // Iraq war and SARS
+  ['2008-09-15', '2008-12-31', 0.9], // Lehman Brothers falls: the financial crisis begins
+  ['2009-12-07', '2009-12-18', 1.4], // COP15 climate summit in Copenhagen
+  ['2014-05-04', '2014-05-11', 1.3], // Eurovision in Copenhagen
+  ['2020-03-11', '2020-06-14', 0.08], // Covid-19: Denmark closes, borders shut until 15 June
+  ['2020-06-15', '2020-08-31', 0.45], // summer 2020: mostly Danish guests
+  ['2020-09-01', '2021-05-31', 0.15], // second wave and the winter lockdown
+  ['2021-06-01', '2021-12-31', 0.6], // reopening with the corona passport
+  ['2022-01-01', '2022-02-28', 0.7], // omicron; restrictions lifted 1 February
+]
+// Price level per year relative to 2025, for rooms and drinks: inflation, price cuts in 2009 and 2020, and the
+// inflation after the invasion of Ukraine. History gets frozen prices (FR-009, FR-010); 2025 on uses the price list.
+// prettier-ignore
+const PRICE_INDEX = {
+  2000: 0.62, 2001: 0.63, 2002: 0.63, 2003: 0.63, 2004: 0.64, 2005: 0.66, 2006: 0.69, 2007: 0.72, 2008: 0.75,
+  2009: 0.7, 2010: 0.71, 2011: 0.73, 2012: 0.74, 2013: 0.75, 2014: 0.77, 2015: 0.79, 2016: 0.81, 2017: 0.83,
+  2018: 0.85, 2019: 0.87, 2020: 0.78, 2021: 0.8, 2022: 0.9, 2023: 0.96, 2024: 0.98,
+}
+const priceIndexOn = (isoDate) => PRICE_INDEX[yearOf(isoDate)] ?? 1
+
+const occupancyByDay = new Map(
+  [...periodByDay].map(([day, period]) => {
+    const event = DEMAND_EVENTS.find(([from, to]) => from <= day && day <= to)
+    const target = SEASON_OCCUPANCY[period.seasonId] * (DEMAND_BY_YEAR[yearOf(day)] ?? 1) * (event?.[2] ?? 1)
+    return [day, Math.min(target, 0.97)]
+  }),
+)
+
+// Countries follow their own events on top of the total demand
+function countryFactor(code, day) {
+  if (code === 'RU') return day >= '2022-02-24' ? 0.05 : day >= '2014-03-01' ? 0.5 : 1 // Crimea, then the war
+  if (code === 'UA' && day >= '2022-02-24') return 0.3
+  if (code === 'CN' && day >= '2020-01-23' && day <= '2022-12-31') return 0.03 // zero-Covid until January 2023
+  if ((code === 'US' || code === 'CA') && day >= '2001-09-11' && day <= '2002-12-31') return 0.6
+  // Covid: travel restrictions hit long-haul guests, and Danes holidayed at home
+  if (day >= '2020-03-11' && day <= '2021-12-31') return code === 'DK' ? 3 : EUROPE.has(code) ? 1 : 0.2
+  return 1
+}
+function pickCountry(day) {
+  const progress = Math.min(Math.max((yearOf(day) - 2000) / 25, 0), 1)
+  const weights = Object.entries(countryWeights).map(([code, [from, to]]) => [
+    code,
+    (from + (to - from) * progress) * countryFactor(code, day),
+  ])
+  let r = random() * weights.reduce((total, [, weight]) => total + weight, 0)
+  return weights.find(([, weight]) => (r -= weight) < 0)?.[0] ?? weights.at(-1)[0]
+}
 
 // --- Bookings ---
 const staysByRoom = new Map(rooms.map((room) => [room.id, []]))
@@ -241,27 +326,26 @@ const imported = readSourceCsv('international_names_with_rooms_1000.csv', 7).map
 const unique = (values) => [...new Set(values)]
 const firstNames = unique(imported.map((b) => b.firstName))
 const familyNames = unique(imported.map((b) => b.familyName))
-const countryCodes = unique(imported.map((b) => b.countryCode))
 
-// Chance of 1–5 empty days after a stay; fewer gaps in high season, so occupancy differs by season in BI (FT5)
-const gapChanceBySeason = { 1: 1.0, 2: 0.85, 3: 0.45 }
+// A free room starts a stay on a day with chance q. With stays of L nights on average and q per empty day, the
+// room is occupied L / (L + (1 - q) / q) of the time; solving for the day's target occupancy p gives q below.
+const AVERAGE_STAY = 5.5 // randomInt(1, 10)
+const startChance = (p) => p / (p + AVERAGE_STAY * (1 - p))
 
 const generatedStays = []
 for (const room of rooms) {
-  let checkIn = addDays(SEED_START, randomInt(0, 3))
-  while (true) {
+  let checkIn = SEED_START
+  while (checkIn < SEED_END) {
+    if (random() >= startChance(occupancyByDay.get(checkIn))) {
+      checkIn = addDays(checkIn, 1)
+      continue
+    }
     const checkOut = addDays(checkIn, randomInt(1, 10))
     if (checkOut > SEED_END) break
     const blocking = staysByRoom.get(room.id).filter((stay) => stay.checkIn < checkOut && checkIn < stay.checkOut)
-    let next = checkOut
-    if (blocking.length) {
-      // jump past the imported booking that is in the way
-      next = blocking.map((stay) => stay.checkOut).sort()[0]
-    } else {
-      generatedStays.push({ room, checkIn, checkOut })
-    }
-    // checkout day may equal the next check-in (half-open intervals)
-    checkIn = addDays(next, random() < gapChanceBySeason[periodOn(next).seasonId] ? randomInt(1, 5) : 0)
+    if (blocking.length === 0) generatedStays.push({ room, checkIn, checkOut })
+    // checkout day may equal the next check-in (half-open intervals); jump past an imported booking in the way
+    checkIn = blocking.length ? blocking.map((stay) => stay.checkOut).sort()[0] : checkOut
   }
 }
 generatedStays.sort((a, b) => a.checkIn.localeCompare(b.checkIn) || a.room.id - b.room.id)
@@ -278,9 +362,10 @@ const generated = generatedStays.map((stay, index) => {
     ...stay,
     firstName: pick(firstNames),
     familyName: pick(familyNames),
-    countryCode: pick(countryCodes),
+    countryCode: pickCountry(stay.checkIn),
     guestCount: randomInt(1, stay.room.type.capacity),
-    totalPrice: toKr(totalOre),
+    // Whole kroner, as a price list in an earlier year would have been
+    totalPrice: toKr(Math.round((totalOre * priceIndexOn(stay.checkIn)) / 100) * 100),
     source: 'backoffice',
   }
   staysByRoom.get(stay.room.id).push(booking)
@@ -371,30 +456,60 @@ for (const b of bookings) {
   }
 }
 
+// The bar sells in proportion to the guests in the house, so Covid and the crises also show in bar sales.
+// Cocktails sell best in summer and in the evening, coffee in winter and in the daytime (FT15).
+const COCKTAIL = 1
+const COFFEE = 2
+const CATEGORY_SEASON = { [COCKTAIL]: { 1: 0.8, 2: 1.0, 3: 1.3 }, [COFFEE]: { 1: 1.2, 2: 1.0, 3: 0.85 } } // category → season
+const saleWeight = (categoryId, day) =>
+  (inHouseByDay.get(day)?.length ?? 0) * CATEGORY_SEASON[categoryId][periodOn(day).seasonId]
+const daysFrom = (first, last) => Array.from({ length: daysBetween(first, last) + 1 }, (_, i) => addDays(first, i))
+const DAYS_2025 = daysFrom('2025-01-01', '2025-12-31')
+const weightIn2025 = (categoryId) => DAYS_2025.reduce((total, day) => total + saleWeight(categoryId, day), 0)
+const weight2025ByCategory = new Map(categories.map((c) => [c.id, weightIn2025(c.id)]))
+
 const sales = []
-function sell(drink, units, firstDay, days) {
+function sell(drink, units, days) {
+  const maxWeight = Math.max(...days.map((day) => saleWeight(drink.categoryId, day)))
   for (let left = units; left > 0;) {
+    const day = pick(days)
+    // rejection sampling: a day is kept in proportion to its weight
+    if (random() * maxWeight >= saleWeight(drink.categoryId, day)) continue
     const quantity = Math.min(randomInt(1, 4), left)
     left -= quantity
-    const day = addDays(firstDay, randomInt(0, days - 1))
-    const hour = String(randomInt(8, 23)).padStart(2, '0')
+    const hour = String(drink.categoryId === COFFEE ? randomInt(7, 16) : randomInt(16, 23)).padStart(2, '0')
     const minute = String(randomInt(0, 59)).padStart(2, '0')
     // ~1/3 is charged to a guest who stays at the hotel that day
     const inHouse = inHouseByDay.get(day) ?? []
     const booking = random() < 1 / 3 && inHouse.length > 0 ? pick(inHouse) : null
-    sales.push({ drink, quantity, soldAt: `${day} ${hour}:${minute}:00`, booking })
+    sales.push({ drink, quantity, unitPriceOre: drink.priceOre, soldAt: `${day} ${hour}:${minute}:00`, booking })
   }
 }
-const DAYS_2026 = daysBetween('2026-01-01', SEED_SALES_END) + 1
+const DAYS_2026 = daysFrom('2026-01-01', SEED_SALES_END)
 for (const drink of drinks) {
-  sell(drink, drink.unitsSold, '2025-01-01', 365)
-  sell(drink, Math.round((drink.unitsSold * DAYS_2026) / 365), '2026-01-01', DAYS_2026)
+  sell(drink, drink.unitsSold, DAYS_2025)
+  // same units per guest and season as 2025
+  const weight2026 = DAYS_2026.reduce((total, day) => total + saleWeight(drink.categoryId, day), 0)
+  sell(drink, Math.round((drink.unitsSold * weight2026) / weight2025ByCategory.get(drink.categoryId)), DAYS_2026)
+}
+
+// Before 2025 the bar's history is one daily total per drink, not single sales, which would be ~2 million rows
+// (004 FR-012). Same units per guest as 2025, at that year's price; no booking, as the old till did not record one.
+for (const day of daysFrom(SEED_START, '2024-12-31')) {
+  for (const drink of drinks) {
+    const expected = (drink.unitsSold * saleWeight(drink.categoryId, day)) / weight2025ByCategory.get(drink.categoryId)
+    const quantity = Math.round(expected * (0.8 + 0.4 * random()))
+    if (quantity === 0) continue
+    const time = drink.categoryId === COFFEE ? '12:00:00' : '20:00:00'
+    const unitPriceOre = Math.round(drink.priceOre * priceIndexOn(day))
+    sales.push({ drink, quantity, unitPriceOre, soldAt: `${day} ${time}`, booking: null })
+  }
 }
 sales.sort((a, b) => a.soldAt.localeCompare(b.soldAt))
 insert(
   'bar_sales',
   ['id', 'drink_id', 'quantity', 'unit_price', 'sold_at', 'booking_id'],
-  sales.map((s, index) => [index + 1, s.drink.id, s.quantity, toKr(s.drink.priceOre), s.soldAt, s.booking?.id ?? null]),
+  sales.map((s, index) => [index + 1, s.drink.id, s.quantity, toKr(s.unitPriceOre), s.soldAt, s.booking?.id ?? null]),
 )
 
 // --- Self-check: stop before writing if the data differs from the assignment (research R15) ---
@@ -405,8 +520,8 @@ assert.equal(
   428,
 )
 assert.equal(seasons.length, 3)
-assert.equal(countries.length, 20)
-for (let day = '2025-01-01'; day <= '2027-12-31'; day = addDays(day, 1)) {
+for (const code of Object.values(countryCodeByCsvName)) assert.ok(countryWeights[code], `country ${code}`)
+for (let day = '2000-01-01'; day <= '2027-12-31'; day = addDays(day, 1)) {
   assert.equal(periods.filter((p) => p.startDate <= day && day <= p.endDate).length, 1, `periods on ${day}`)
 }
 
@@ -427,6 +542,33 @@ for (const stays of staysByRoom.values()) {
   stays.slice(1).forEach((stay, i) => assert.ok(stays[i].checkOut <= stay.checkIn, `booking ${stay.id} overlaps`))
 }
 
+// Occupancy and room revenue per year and season, the revenue of a stay spread evenly over its nights (FR-009, FR-016)
+const roomNightsByYear = new Map()
+const revenueByYearSeason = new Map()
+for (const b of bookings) {
+  const nightCount = daysBetween(b.checkIn, b.checkOut)
+  for (let night = b.checkIn; night < b.checkOut; night = addDays(night, 1)) {
+    const key = `${yearOf(night)}|${periodOn(night).seasonId}`
+    roomNightsByYear.set(yearOf(night), (roomNightsByYear.get(yearOf(night)) ?? 0) + 1)
+    revenueByYearSeason.set(key, (revenueByYearSeason.get(key) ?? 0) + b.totalPrice / nightCount)
+  }
+}
+const occupancyIn = (year) =>
+  roomNightsByYear.get(year) / (rooms.length * daysBetween(`${year}-01-01`, `${year + 1}-01-01`))
+const occupancy2025 = occupancyIn(2025)
+assert.ok(occupancy2025 >= 0.65 && occupancy2025 <= 0.8, `occupancy 2025 is ${occupancy2025}`)
+assert.ok(occupancyIn(2020) < occupancyIn(2019) / 2, 'Covid-19 halves occupancy in 2020')
+assert.ok(occupancyIn(2009) < occupancyIn(2007), 'the financial crisis lowers occupancy')
+for (const year of SEED_YEARS.filter((y) => y < 2027 && (y < 2020 || y > 2021))) {
+  const [low, mid, high] = [1, 2, 3].map((seasonId) => revenueByYearSeason.get(`${year}|${seasonId}`))
+  assert.ok(high > mid && mid > low, `room revenue ${year}: low ${low}, mid ${mid}, high ${high}`)
+}
+assert.ok(
+  bookings.filter((b) => b.countryCode === 'RU' && b.checkIn.startsWith('2023')).length <
+    bookings.filter((b) => b.countryCode === 'RU' && b.checkIn.startsWith('2013')).length / 5,
+  'Russian guests nearly vanish after the invasion of Ukraine',
+)
+
 const departed = bookings.filter((b) => b.checkOut <= SEED_SCORES_END)
 const scores = departed.map((b) => b.satisfactionScore).filter((score) => score !== null)
 assert.ok(
@@ -438,7 +580,7 @@ assert.ok(Math.abs(scores.reduce((sum, s) => sum + s, 0) / scores.length - 4.14)
 
 assert.equal(drinks.length, 30)
 assert.equal(drinks.filter((d) => d.categoryId === 1).length, 20)
-const sales2025 = sales.filter((s) => s.soldAt < '2026-01-01')
+const sales2025 = sales.filter((s) => s.soldAt.startsWith('2025'))
 for (const drink of drinks) {
   const units = sales2025.filter((s) => s.drink === drink).reduce((sum, s) => sum + s.quantity, 0)
   assert.equal(units, drink.unitsSold, `units of ${drink.name} in 2025`)
@@ -449,8 +591,9 @@ assert.equal(
   1_344_864_034,
 )
 for (const s of sales) {
-  assert.ok(s.soldAt.slice(0, 10) <= SEED_SALES_END && s.quantity >= 1 && s.quantity <= 4)
   const day = s.soldAt.slice(0, 10)
+  // single sales from 2025; before that daily totals
+  assert.ok(day <= SEED_SALES_END && s.quantity >= 1 && (day < '2025-01-01' || s.quantity <= 4), `sale on ${day}`)
   if (s.booking) assert.ok(s.booking.checkIn <= day && day < s.booking.checkOut)
 }
 
