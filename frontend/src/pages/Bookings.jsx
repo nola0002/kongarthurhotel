@@ -43,8 +43,9 @@ export async function loader({ request }) {
   return { ...list, roomTypes, countries }
 }
 
-const th = 'sticky top-0 h-12 border-b border-line bg-surface px-4 text-left text-sm font-medium text-ink-3'
-const td = 'border-b border-line px-4'
+// px-3, not px-4: with a year on both dates and a long name the eight columns only just fit 1440px unwrapped
+const th = 'sticky top-0 h-12 border-b border-line bg-surface px-3 text-left text-sm font-medium text-ink-3'
+const td = 'border-b border-line px-3'
 const readFilters = (params) => Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? '']))
 
 export default function Bookings() {
@@ -119,7 +120,8 @@ export default function Bookings() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* A grid, not flex: inputClass has w-full, which beats w-auto, so each field fills its own column */}
+      <div className="mb-4 grid grid-cols-[20rem_14rem_12rem_auto] items-center justify-start gap-3">
         <div className="relative">
           <MagnifyingGlassIcon size={17} className="pointer-events-none absolute top-3 left-3 text-ink-3" />
           <label htmlFor="booking-search" className="sr-only">
@@ -128,10 +130,10 @@ export default function Bookings() {
           <input
             id="booking-search"
             type="search"
-            placeholder="Søg på navn, bookingnr. eller værelse"
+            placeholder="Navn, bookingnr. eller værelse"
             value={filters.q}
             onChange={(e) => setFilter('q', e.target.value)}
-            className={cx(inputClass, 'w-80 pl-10')}
+            className={cx(inputClass, 'pl-10')}
           />
         </div>
         <label htmlFor="booking-type" className="sr-only">
@@ -141,7 +143,7 @@ export default function Bookings() {
           id="booking-type"
           value={filters.type}
           onChange={(e) => setFilter('type', e.target.value)}
-          className={cx(inputClass, 'w-auto')}
+          className={inputClass}
         >
           <option value="">Alle værelsestyper</option>
           {roomTypes.map((t) => (
@@ -157,7 +159,7 @@ export default function Bookings() {
           id="booking-country"
           value={filters.land}
           onChange={(e) => setFilter('land', e.target.value)}
-          className={cx(inputClass, 'w-auto max-w-52')}
+          className={inputClass}
         >
           <option value="">Alle lande</option>
           {countries.map((c) => (
@@ -166,17 +168,17 @@ export default function Bookings() {
             </option>
           ))}
         </select>
-        <fieldset className="flex items-center gap-2">
+        <fieldset className="grid grid-cols-[9.5rem_auto_9.5rem] items-center gap-2">
           <legend className="sr-only">Ophold i perioden</legend>
-          <label htmlFor="booking-from" className="text-sm text-ink-2">
-            Periode
+          <label htmlFor="booking-from" className="sr-only">
+            Fra
           </label>
           <input
             id="booking-from"
             type="date"
             value={filters.fra}
             onChange={(e) => setFilter('fra', e.target.value)}
-            className={cx(inputClass, 'w-auto')}
+            className={inputClass}
           />
           <label htmlFor="booking-to" className="text-ink-3">
             <span aria-hidden>–</span>
@@ -187,33 +189,37 @@ export default function Bookings() {
             type="date"
             value={filters.til}
             onChange={(e) => setFilter('til', e.target.value)}
-            className={cx(inputClass, 'w-auto')}
+            className={inputClass}
           />
         </fieldset>
-        {filtered && (
+      </div>
+
+      {/* "Ryd filtre" sits on the tab row: the filter row has no room left for it at 1440px */}
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <nav aria-label="Visning" className="flex gap-1">
+          {TABS.map(([slug, label]) => (
+            <Link
+              key={slug}
+              // A tab keeps the other filters but leaves the search, which would override the view
+              to={withParams({ visning: slug, q: '', side: '' })}
+              aria-current={activeTab === slug ? 'page' : undefined}
+              className={cx(
+                'flex h-10 items-center gap-2 rounded-lg px-4 transition-colors duration-100',
+                activeTab === slug ? 'bg-surface font-medium shadow-panel' : 'text-ink-2 hover:bg-ink/[0.04]',
+              )}
+            >
+              {label}
+              <span className="tnum font-normal text-ink-3">{num(counts[VIEWS[slug]])}</span>
+            </Link>
+          ))}
+        </nav>
+        {/* The empty state has its own */}
+        {filtered && items.length > 0 && (
           <Button variant="ghost" onClick={clear}>
             Ryd filtre
           </Button>
         )}
       </div>
-
-      <nav aria-label="Visning" className="mb-5 flex gap-1">
-        {TABS.map(([slug, label]) => (
-          <Link
-            key={slug}
-            // A tab keeps the other filters but leaves the search, which would override the view
-            to={withParams({ visning: slug, q: '', side: '' })}
-            aria-current={activeTab === slug ? 'page' : undefined}
-            className={cx(
-              'flex h-10 items-center gap-2 rounded-lg px-4 transition-colors duration-100',
-              activeTab === slug ? 'bg-surface font-medium shadow-panel' : 'text-ink-2 hover:bg-ink/[0.04]',
-            )}
-          >
-            {label}
-            <span className="tnum font-normal text-ink-3">{num(counts[VIEWS[slug]])}</span>
-          </Link>
-        ))}
-      </nav>
 
       <Tile flush>
         {items.length === 0 ? (
@@ -229,7 +235,9 @@ export default function Bookings() {
             />
           )
         ) : (
-          <table className="w-full border-separate border-spacing-0">
+          // Dimmed on the table, not the tbody: Chrome does not always repaint a table section that has its own
+          // opacity (and transition) when its rows are swapped, so the new rows stayed blank until hovered
+          <table className={cx('w-full border-separate border-spacing-0', loading && 'opacity-60')}>
             <thead>
               <tr>
                 {sortHeader('checkIn', 'Ankomst', 'rounded-tl-2xl pl-6')}
@@ -242,25 +250,27 @@ export default function Bookings() {
                 {sortHeader('totalPrice', 'Pris', 'rounded-tr-2xl pr-6 text-right')}
               </tr>
             </thead>
-            <tbody className={cx('transition-opacity duration-100', loading && 'opacity-60')}>
+            <tbody>
               {items.map((b) => (
                 <tr
                   key={b.id}
                   onClick={() => navigate(`/bookinger/${b.id}`)}
-                  className="h-16 cursor-pointer hover:[&>td]:bg-sunken/60"
+                  // No wrapping: a date, status or amount broken over two lines is hard to read, and rows stay h-16
+                  className="h-16 cursor-pointer whitespace-nowrap hover:[&>td]:bg-sunken/60"
                 >
                   <td className={cx(td, 'tnum pl-6')}>{date(b.checkIn)}</td>
                   <td className={cx(td, 'tnum')}>{date(b.checkOut)}</td>
                   <td className={cx(td, 'tnum text-right')}>{nightsLabel(b.nights)}</td>
-                  <td className={td}>
+                  {/* The only cell allowed to wrap, and only the country line, so the table fits next to long names */}
+                  <td className={cx(td, 'whitespace-normal')}>
                     <Link
                       to={`/bookinger/${b.id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="font-medium hover:text-signal"
+                      className="font-medium whitespace-nowrap hover:text-signal"
                     >
                       {guestName(b)}
                     </Link>
-                    <div className="flex items-center gap-2 text-sm text-ink-3">
+                    <div className="flex flex-wrap items-center gap-x-2 text-sm text-ink-3">
                       <span className="tnum">#{b.id}</span>
                       {b.country.name}
                       {b.source === 'booking_system' && <SourceBadge />}
@@ -280,10 +290,13 @@ export default function Bookings() {
             </tbody>
             <tfoot>
               <tr className="h-16">
-                <td colSpan={7} className="tnum pl-6 text-ink-2">
+                <td colSpan={6} className="tnum pl-6 text-ink-2">
                   I alt, {num(total)} bookinger
                 </td>
-                <td className="tnum pr-6 text-right text-lg font-semibold">{kr(totalPrice)}</td>
+                {/* Spans Status too, so the large total does not widen the Pris column */}
+                <td colSpan={2} className="tnum pr-6 text-right text-lg font-semibold">
+                  {kr(totalPrice)}
+                </td>
               </tr>
             </tfoot>
           </table>

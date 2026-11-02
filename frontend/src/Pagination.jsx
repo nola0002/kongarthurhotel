@@ -48,7 +48,7 @@ function Step({ to, label, Icon }) {
 export function Pagination({ page, pageCount, pageSize, total, shown, sizes, hrefFor, onPageSize }) {
   const first = (page - 1) * pageSize + 1
   return (
-    <nav aria-label="Sider" className="mt-4 flex items-center justify-between gap-4">
+    <nav aria-label="Sider" className="mt-4 flex items-center justify-between gap-4 whitespace-nowrap">
       <p className="tnum text-ink-2">
         {num(first)}–{num(first + shown - 1)} af {num(total)}
       </p>

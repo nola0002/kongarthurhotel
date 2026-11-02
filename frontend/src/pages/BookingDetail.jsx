@@ -1,14 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, useLoaderData, useNavigate } from 'react-router'
-import {
-  MartiniIcon,
-  PencilSimpleIcon,
-  SignInIcon,
-  SignOutIcon,
-  SmileyIcon,
-  SpinnerGapIcon,
-  TrashIcon,
-} from '@phosphor-icons/react'
+import { SpinnerGapIcon } from '@phosphor-icons/react'
 import { api } from '../api.js'
 import { date, dateTime, guestName, kr, num, period } from '../format.js'
 import { useStayActions } from '../SatisfactionDialog.jsx'
@@ -78,40 +70,32 @@ export default function BookingDetail() {
             <StatusBadge status={booking.status} />
           </span>
         }
-        description={`Booking #${booking.id} · ${stay} · ${booking.roomType.name}, værelse ${booking.room.number}`}
+        description={`${stay} · værelse ${booking.room.number}, ${booking.roomType.name} · ${booking.country.name}`}
         actions={
           <>
             {/* Only the step that fits the API's status is offered; the API has the last word (FR-010) */}
             {booking.status === 'arriving' && (
               <Button variant="primary" disabled={pending} onClick={() => stayActions.run(booking, 'check-in')}>
-                {pending ? <SpinnerGapIcon size={16} className="animate-spin" /> : <SignInIcon size={16} />}
+                {pending && <SpinnerGapIcon size={16} className="animate-spin" />}
                 Tjek ind
               </Button>
             )}
             {booking.status === 'departing' && (
               <Button variant="primary" disabled={pending} onClick={() => stayActions.run(booking, 'check-out')}>
-                {pending ? <SpinnerGapIcon size={16} className="animate-spin" /> : <SignOutIcon size={16} />}
+                {pending && <SpinnerGapIcon size={16} className="animate-spin" />}
                 Tjek ud
               </Button>
             )}
             {['arriving', 'in_house'].includes(booking.status) && (
-              <ButtonLink to={`/barsalg?booking=${booking.id}`}>
-                <MartiniIcon size={16} className="text-ink-3" />
-                Sælg på værelset
-              </ButtonLink>
+              <ButtonLink to={`/barsalg?booking=${booking.id}`}>Sælg på værelset</ButtonLink>
             )}
             {['departing', 'checked_out', 'departed'].includes(booking.status) && (
               <Button onClick={() => stayActions.rate(booking)}>
-                <SmileyIcon size={16} className="text-ink-3" />
                 {booking.satisfactionScore != null ? 'Ret tilfredshed' : 'Registrér tilfredshed'}
               </Button>
             )}
-            <Button onClick={() => editBooking(booking)}>
-              <PencilSimpleIcon size={16} className="text-ink-3" />
-              Ret
-            </Button>
+            <Button onClick={() => editBooking(booking)}>Rediger</Button>
             <Button variant="danger" onClick={() => confirmRef.current.showModal()}>
-              <TrashIcon size={16} />
               Slet booking
             </Button>
           </>
@@ -121,7 +105,6 @@ export default function BookingDetail() {
       <div className="grid grid-cols-12 items-start gap-5">
         <Tile title="Gæst" className="col-span-4">
           <dl className="divide-y divide-line">
-            <Field label="Navn">{guestName(booking)}</Field>
             <Field label="Land">{booking.country.name}</Field>
             <Field label="Antal gæster">{num(booking.guestCount)}</Field>
             <Field label="Kilde">{booking.source === 'booking_system' ? <SourceBadge /> : 'Back office'}</Field>
