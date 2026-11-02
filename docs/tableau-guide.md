@@ -329,7 +329,7 @@ Den øverste bjælke er den type, der tjener mest i det valgte udsnit.
 2. Kolonner: `Værelsesnætter.revenue` (SUM).
 3. Marks: Bar. Sortér faldende.
 
-Vis alle 20 lande sorteret i stedet for et Top 10-filter. Et Top N-filter og almindelige
+Vis alle 44 lande sorteret i stedet for et Top 10-filter. Et Top N-filter og almindelige
 dimensionsfiltre anvendes samtidig, så "top 10" ville ikke følge år-filteret, medmindre filtrene
 lægges i context
 ([Order of operations](https://help.tableau.com/current/pro/desktop/en-us/order_of_operations.htm)).

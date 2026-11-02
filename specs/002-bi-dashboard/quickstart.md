@@ -106,7 +106,7 @@ barsalget, og vælg derefter ét filter ad gangen.
 | F2 | Værelsestype = Suite (filter og klik) | Indtjening, belægning og bookinger | Barsalg, cocktail/kaffe og alle nøgletalsfliser | FR-012, US7 sc. 4 |
 | F3 | Sæson = Højsæson | Indtjening og belægning (kun højsæsonnætter), bookinger (ankomst i højsæson) og barsalg (salg i højsæson) | Nøgletalsfliserne | FR-012, US2 sc. 2, US7 sc. 2 |
 | F4 | Måned = juli | Som F3, kun for juli | Nøgletalsfliserne | FR-012 |
-| F5 | Ingen. Åbn listerne i filtrene for værelsestype og land | Alle 8 værelsestyper og alle 20 lande står i listerne | – | FR-017, US7 sc. 5 |
+| F5 | Ingen. Åbn listerne i filtrene for værelsestype og land | Alle 8 værelsestyper og alle 44 lande står i listerne | – | FR-017, US7 sc. 5 |
 | F6 | Sæson = Højsæson | Baromsætningen i arket = `echo "SELECT SUM(s.quantity * s.unit_price) FROM bar_sales s JOIN season_periods p ON DATE(s.sold_at) BETWEEN p.start_date AND p.end_date JOIN seasons x ON x.id = p.season_id WHERE YEAR(s.sold_at) = 2025 AND x.name = 'Højsæson'" \| sql` | – | FR-012, SC-006 |
 
 Teksten om, at nøgletalsfliserne og cocktail/kaffe-andelen kun følger år-filteret, står på

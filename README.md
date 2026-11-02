@@ -199,22 +199,29 @@ eksporteret én gang fra xlsx til CSV). Det er deterministisk (fast PRNG-seed og
 så alle får de samme data, og det stopper med en fejl, hvis data afviger fra opgaven:
 
 - 214 værelser i opgavens 8 værelsestyper (plads til 428 gæster) med opgavens priser.
-- 3 sæsoner: lav (januar–februar og 1.–19. december), mellem (marts–maj og
-  september–november) og høj (juni–august og jul 20.–31. december).
-- Opgavens 20 lande og 30 drinks (20 cocktails og 10 kaffetyper).
-- 21.570 bookinger fra 2025-01-01 til 2027-02-28. Booking 1–1000 er opgavens CSV-fil række for
-  række i 2025 (kilde "Bookingsystem"). Resten er genereret med samme navne og lande.
-  Belægning 70,5 % i 2025 og 70,6 % i 2026 (ca. 65 % i lav-, 68 % i mellem- og 79 % i
-  højsæson).
+- 3 sæsoner: lav (januar–marts og 1. november–19. december), mellem (april–maj og
+  september–oktober) og høj (juni–august og jul 20.–31. december).
+- 44 lande (opgavens 20 plus Danmark, nabolandene og hotellets øvrige markeder) og opgavens 30
+  drinks (20 cocktails og 10 kaffetyper).
+- 233.644 bookinger fra 2000-01-01 til 2027-02-28. Booking 1–1000 er opgavens CSV-fil række for
+  række i 2025 (kilde "Bookingsystem"). Resten er genereret med opgavens navne.
+  Belægning ca. 70 % i 2025 (56 % i lav-, 72 % i mellem- og 86 % i højsæson), og
+  værelsesomsætningen er højsæson > mellemsæson > lavsæson.
+- **Historik fra 2000** (spec 004 FR-016) følger virkelighedens begivenheder: dot-com-krakket
+  og 9/11, finanskrisen (2009), COP15, Covid-19 (25 % belægning i 2020) og krigen i Ukraine
+  (russiske gæster forsvinder, priserne stiger). Priser før 2025 følger et prisindeks pr. år og
+  gemmes som fastfrosne priser. Tallene er gruppens skøn, ikke hotellets regnskaber.
 - Kundetilfredshed (1–5) på ca. 80 % af bookingerne med afrejse til og med 2026-10-30
   (gennemsnit ca. 4,15). Scorerne er **genererede**, fordi opgavens datasæt ingen
   tilfredshedsdata har (spec 003 FR-015).
-- 132.698 barsalg til og med 2026-11-05. Salget i 2025 er præcis drinkfilens "Units Sold"
-  (179.958 enheder, 13.448.640,34 kr.).
+- 407.708 barsalg til og med 2026-11-05. Salget i 2025 er præcis drinkfilens "Units Sold"
+  (179.958 enheder, 13.448.640,34 kr.). Salget følger antallet af gæster. Kaffe sælges om
+  dagen og mest om vinteren, cocktails om aftenen og mest om sommeren. Før 2025 er barsalget én
+  dagstotal pr. drink.
 
 Priserne på de genererede bookinger beregnes med samme `calculateStayPrice` som backend.
-`docker compose up` fra et tomt volume tager ca. 15 sekunder, når billederne er bygget
-(indlæsningen af seed tager et par sekunder).
+`docker compose up` fra et tomt volume tager ca. 20 sekunder, når billederne er bygget
+(indlæsningen af seed-filen på ca. 50 MB tager ca. 6 sekunder).
 
 **Nulstilling**: Filerne i `db/` køres af MySQL-containeren (`docker-entrypoint-initdb.d`)
 **kun på et tomt volume**. Efter en ændring af skema eller seed, også når du har hentet en ny
