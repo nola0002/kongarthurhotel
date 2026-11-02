@@ -28,8 +28,9 @@ til `/login?fra=<sti>`.
 
 ## Shell
 
-Kilde: `Shell.jsx`. Sidebar med søgeknap, navigation i grupperne Reception, Bar, Økonomi og
-Konto og kontoen nederst, indholdskort, toast, kommandopalet (⌘K) og genvejen `N` er
+Kilde: `Shell.jsx`. Sidebar med søgefelt, navigation i grupperne Reception og Bar og økonomi og
+kontoknappen nederst (menu med Profil og Log ud), indholdskort, toast, kommandopalet (⌘K) og
+genvejen `N` er
 specificeret i [`komponenter.md` § Shell](komponenter.md#shell).
 
 ## Log ind (FR-015, 005 FR-018)
@@ -54,13 +55,14 @@ sendes kun, når `?dato=` står i adressen, så "i dag" er serverens dato.
   primær "Ny booking" med `Kbd N`.
 - Fire `Stat`-fliser fra `kpis`: **Belægning i nat** (`pct(rate)`, "135 af 214 værelser"),
   **Ankomster tilbage** (remaining af total), **Afrejser tilbage** og **Gns. pris pr. nat**.
-- Venstre (`col-span-8`): "Ankomster" og "Afrejser" med gæst, land, værelse, nætter, gæster,
-  status og ét næste skridt pr. række: "Tjek ind" (`arriving`), "Tjek ud" (`departing`) eller
+- Fra 1400 px to kolonner (`minmax(0,1fr)_20rem`), smallere stables siderne. Hovedkolonnen:
+  "Ankomster" og "Afrejser" med gæst (anden linje: land · nætter), værelse, status og ét næste
+  skridt pr. række: "Tjek ind" (`arriving`), "Tjek ud" (`departing`) eller
   "Registrér tilfredshed" (`checked_out`/`departed` uden score). Efter udtjek åbner
   tilfredshedsdialogen med det samme. Ind-/udtjek ligger i `useStayActions()` i
   `SatisfactionDialog.jsx`, så Oversigt og folio deler det.
-- Højre (`col-span-4`): "I huset i nat" (bookinger og gæster), "Barsalg" med beløbet og linket
-  "Åbn kassen", og "Ledige værelser" pr. type ("Udsolgt", når `free` er 0).
+- Sidekolonnen: "I huset" (bookinger, gæster og dagens barsalg) og "Ledige værelser" pr. type
+  ("17 af 46", "Udsolgt", når `free` er 0).
 - React tæller ikke. Alle tal kommer fra API'et.
 
 ## Belægningsplan (003: FR-005–FR-009, FR-017)
@@ -88,7 +90,8 @@ serveren: `GET /api/bookings` med side, sortering og filtre fra URL'en.
 - `PageHeader`: titel "Bookinger", "N bookinger, M i huset i dag" (`counts`) og primær "Ny
   booking" med `Kbd N`.
 - Filterlinje: søgning (navn, bookingnummer eller værelse, `?q=`), værelsestype (`?type=`), land
-  (`?land=`), periode (`?fra=`/`?til=`, ophold der overlapper) og "Ryd filtre".
+  (`?land=`) og periode (`?fra=`/`?til=`, ophold der overlapper) i et grid med faste kolonner.
+  "Ryd filtre" står til højre på fanelinjen, når der er filtre.
 - Faner **Kommende · I huset · Afrejst · Alle** med antal fra `counts`. Fanerne beholder de
   andre filtre, men ikke søgningen, fordi API'et ignorerer visningen under søgning.
 - Kolonner: Ankomst, Afrejse og Nætter (sorterbare), Gæst (sorterbar; navn som link, `#id`, land
@@ -162,8 +165,8 @@ Kilde: `pages/Revenue.jsx`. Ét kald: `GET /api/revenue?from=&to=&groupBy=`.
 
 - Periode og gruppering i URL'en (`?fra=`, `?til=`, `?pr=`), genveje: Denne måned, I år, Sidste
   år og 2000–i dag. Standard: i år pr. måned.
-- Fire fliser: Bar i alt, Solgte enheder, Værelser i alt (med nætter) og Samlet (`krShort` og
-  `krExact`).
+- Fire fliser: Bar i alt, Solgte enheder, Værelser i alt (med nætter) og Samlet (`krShort` med
+  tre betydende cifre og `krExact` under).
 - Baren (primær): stablede søjler pr. periode (cocktail/kaffe; højden er kun en visningsskala),
   "Vis som tabel", kategoriandele og top 5-drinks.
 - Værelser (sekundær): omsætning pr. periode og antal nætter.
@@ -173,10 +176,10 @@ Kilde: `pages/Revenue.jsx`. Ét kald: `GET /api/revenue?from=&to=&groupBy=`.
 
 Kilde: `pages/Profile.jsx`.
 
-- Konto: brugernavn og "Log ud".
-- Skift adgangskode: nuværende, ny (mindst 8 tegn) og gentag. Kun gentagelsen tjekkes i
+- Titel "Profil" med brugernavnet. "Log ud" ligger i kontomenuen i sidebaren.
+- Adgangskode (venstre): nuværende, ny (mindst 8 tegn) og gentag. Kun gentagelsen tjekkes i
   formularen. Resten afgøres af API'et, og fejlen vises ved feltet.
-- Administration: prislisten som tabel (værelsestyper × sæsoner, "Gem" pr. række sender kun
+- Højre: prislisten som tabel (værelsestyper × sæsoner, "Gem" pr. række sender kun
   ændrede celler) og drinkkortet (pris og "Gem" pr. drink). Nye priser gælder kun nye bookinger
   og salg. Toast efter hver gemning.
 

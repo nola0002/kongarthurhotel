@@ -16,7 +16,11 @@ Kilde: `frontend/src/ui.jsx` (`cx`, `buttonClass`, `Button`, `ButtonLink`). Vari
 `primary`, `secondary` (standard), `ghost` og `danger`. Størrelser: `sm` (`h-8`), `md` (`h-10`,
 standard) og `icon` (`size-10`). `Button` er `type="button"`, medmindre andet angives.
 
-Ikoner i sekundære knapper har `text-ink-3`. Ikonstørrelse er 16–17px i knapper og inputs.
+Ikoner bruges kun i primære handlinger (fx "Ny booking"), spinnere, navigation og ikonknapper med
+`aria-label`, ikke i sekundære knapper. Ikonstørrelse er 16–17px i knapper og inputs.
+
+`inputClass` har `w-full`. `cx` sammensætter kun klasser, så `cx(inputClass, 'w-80')` overstyrer
+ikke bredden. Giv i stedet feltet sin bredde via forælderen (fx en grid-kolonne).
 
 ### Øvrige primitiver
 
@@ -123,17 +127,17 @@ Kilde: `Shell.jsx`. Kun desktop, der er ingen mobilvisning.
 - Ramme: `grid h-dvh grid-cols-[264px_1fr] overflow-hidden`.
 - Sidebar: `flex flex-col px-4 py-5` på `paper`, oppefra:
   - Ordmærke "Kong Arthur": `text-xl font-semibold tracking-[-0.02em]`.
-  - Søgeknap "Søg … ⌘K", der åbner kommandopaletten (se § Kommandopalet).
-  - Navigation i grupper med en lille gruppetitel (`NAV` i `Shell.jsx`, 005 FR-017):
+  - Søgefelt "Søg … ⌘K" (`bg-surface shadow-panel`), der åbner kommandopaletten (se § Kommandopalet).
+  - Navigation i to grupper med en lille gruppetitel (`NAV` i `Shell.jsx`, 005 FR-017):
     **Reception**: Oversigt (`House`), Belægningsplan (`CalendarDots`), Bookinger (`Bed`).
-    **Bar**: Kasse (`/barsalg`, `CashRegister`). **Økonomi**: Omsætning (`/omsaetning`,
-    `ChartLineUp`). **Konto**: Profil (`/profil`, `UserCircle`).
+    **Bar og økonomi**: Kasse (`/barsalg`, `CashRegister`), Omsætning (`/omsaetning`, `ChartLineUp`).
   - Nav-punkt: `flex h-10 items-center gap-3 rounded-lg px-3`, Phosphor-ikon 20px.
   - Inaktivt punkt: `text-ink-2 hover:bg-ink/[0.04]`, ikon `text-ink-3`.
   - Aktivt punkt: `bg-ink/[0.07] font-medium text-ink`, ikon `weight="fill" text-signal`.
-  - Nederst (`mt-auto`): den indloggede konto med initial-avatar som link til `/profil`. "Log
-    ud" ligger på profilsiden.
-- Indholdskort (`<main>`): `my-2 mr-2 h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl bg-canvas shadow-canvas`. Indholdet ligger i `mx-auto max-w-[1280px] px-8 py-10`.
+  - Nederst (`mt-auto`): kontoknappen (`bg-surface shadow-panel`, initial og brugernavn). Den
+    åbner en native `popover` opad med "Profil" og "Log ud". Browseren lukker den ved klik
+    udenfor og Escape.
+- Indholdskort (`<main>`): `relative` (så `sr-only`-elementer placeres i kortet og kun kortet scroller), `my-2 mr-2 h-[calc(100dvh-1rem)] overflow-y-auto rounded-3xl bg-canvas shadow-canvas`. Indholdet ligger i `mx-auto max-w-[1280px] px-8 py-10`.
 - Toasten (se § Toast) bor også i `Shell.jsx`.
 - Tastaturgenvej: `N` åbner "Ny booking" og vises som `<Kbd>N</Kbd>` på knappen. Den ignoreres, når fokus er i `input`/`textarea`/`select`/`[contenteditable]` eller en åben `<dialog>`, eller når der holdes en modifier-tast.
 
@@ -200,8 +204,9 @@ Kilde: `pages/RoomPlan.jsx`. Værelser × dage som en almindelig `<table>` uden 
 (214 værelser × 31 dage ≈ 6.600 celler). Rækkerne bygges én gang pr. API-svar (`useMemo`).
 
 - Scroll-container i `<Tile flush>`: `max-h-[calc(100dvh-16rem)] overflow-auto rounded-2xl`.
-- `<table className="w-full table-fixed border-separate border-spacing-0">`. Første kolonne
-  `w-28`, dagskolonner `w-11`. Ved 7–14 dage fordeles resten af bredden.
+- `<table className="w-full table-fixed border-separate border-spacing-0">` med
+  `minWidth: calc(7rem + dage × 2.75rem)`. Første kolonne `w-28`, dagskolonnerne deler resten, så
+  31 dage scroller vandret, og 7–14 dage fylder bredden uden at værelseskolonnen vokser.
 - Sticky header: `sticky top-0 z-20` på hver dagscelle med ugedag (`weekday`) og dagens nummer
   (`tnum`). Dags dato har `bg-sunken` og teksten "I dag". Hjørnecellen er `sticky top-0 left-0
   z-30`.
@@ -212,7 +217,9 @@ Kilde: `pages/RoomPlan.jsx`. Værelser × dage som en almindelig `<table>` uden 
 - Celler: `h-10 border-b border-l border-line p-0`.
 - Bjælke: én `<td colSpan>` fra `max(checkIn, from)` til `min(checkOut, to)` (geometri: React
   finder kolonnen ved at slå ISO-datoen op i `dates`). Indeni et `<Link>` `flex h-8 rounded-md
-  px-2 text-sm` med statussens pill-farver, `StatusMarker` og navnet (`truncate`). `rounded-l-none`
+  px-2 text-sm` med statussens pill-farver, `StatusMarker` og navnet (`truncate`). En kort bjælke
+  skjuler navnet med en container query (`@container`, `@max-[3.5rem]:hidden`), så den kun viser
+  markøren. Navnet står stadig i `aria-label` og `title`. `rounded-l-none`
   / `rounded-r-none`, når opholdet fortsætter uden for perioden.
 - "Ledige"-række: `free[i]` fra API'et, `tnum text-center text-sm font-medium text-ink-2`.
 
