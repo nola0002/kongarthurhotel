@@ -1,15 +1,17 @@
 services:
   db:
-    image: mysql:8.4
+    image: postgres:18
     env_file: .env
     environment:
+      # initdb takes the server's time zone from TZ, so NOW() and LOCALTIMESTAMP are Danish local time
       TZ: Europe/Copenhagen
     volumes:
-      - db-data:/var/lib/mysql
+      # A new name instead of db-data, so an old MySQL volume is never mounted into PostgreSQL (006)
+      - pg-data:/var/lib/postgresql
       - ./db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # TCP, so the container only reports healthy after the init scripts have run (KB-T4)
-      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 --protocol=TCP -u$$MYSQL_USER -p$$MYSQL_PASSWORD']
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB']
       interval: 3s
       retries: 40
       start_period: 60s
@@ -46,4 +48,4 @@ services:
       - ./backend/openapi.yaml:/spec/openapi.yaml:ro
 
 volumes:
-  db-data:
+  pg-data:
