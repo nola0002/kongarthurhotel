@@ -26,14 +26,16 @@ const authed = (path, options = {}) => call(path, { ...options, headers: { cooki
 // Only `before` logs in, so changing the password cannot break another test.
 describe(
   'API 005',
-  { skip: !process.env.DB_HOST && 'needs MySQL: run with docker compose exec backend npm test' },
+  { skip: !process.env.DB_HOST && 'needs PostgreSQL: run with docker compose exec backend npm test' },
   () => {
     before(async () => {
       await setupTestDb()
       process.env.BOOKING_SYSTEM_API_KEY = API_KEY
       const { default: app } = await import('../src/app.js')
       ;({ pool } = await import('../src/db.js'))
-      const [[{ database }]] = await pool.query('SELECT DATABASE() AS `database`')
+      const {
+        rows: [{ database }],
+      } = await pool.query('SELECT current_database() AS database')
       assert.equal(database, 'kongarthur_test')
       server = app.listen(0)
       await once(server, 'listening')

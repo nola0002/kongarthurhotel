@@ -23,7 +23,7 @@ const stay = (bookingId, roomId, checkIn, checkOut, guestCount = 2, extra = {}) 
   ...extra,
 })
 
-// Mirror the repositories' SQL conditions, so the service gets what MySQL would return
+// Mirror the repositories' SQL conditions, so the service gets what the database would return
 const overlaps = (s, from, to) => s.checkIn < to && s.checkOut > from
 const withinBounds = (s, { checkInAfter, checkInOnOrBefore, checkOutAfter, checkOutOnOrBefore }) =>
   (!checkInAfter || s.checkIn > checkInAfter) &&

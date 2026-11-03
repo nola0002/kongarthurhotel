@@ -1,24 +1,24 @@
-import { pool } from '../db.js'
+import { query } from '../db.js'
 import { toOre } from '../money.js'
 
 export { listDrinkCategories, listPeriods } from './analyticsRepository.js'
 export { listPrices } from './pricingRepository.js'
 
-const PERIOD_FORMAT = { day: '%Y-%m-%d', month: '%Y-%m', year: '%Y' }
+const PERIOD_FORMAT = { day: 'YYYY-MM-DD', month: 'YYYY-MM', year: 'YYYY' }
 
 // A range instead of DATE(sold_at) so the index on sold_at is used; `to` is inclusive
 const SALES_IN_PERIOD = `
   FROM bar_sales s
   JOIN drinks d ON d.id = s.drink_id
   JOIN drink_categories dc ON dc.id = d.drink_category_id
-  WHERE s.sold_at >= ? AND s.sold_at < DATE_ADD(?, INTERVAL 1 DAY)`
+  WHERE s.sold_at >= ?::date AND s.sold_at < ?::date + 1`
 
 const toTotals = ({ total, quantity, ...row }) => ({ ...row, totalOre: toOre(total), quantity: Number(quantity) })
 
 // Aggregated in SQL for speed (database.md §6): a year has ~180,000 sales
 export async function listBarByPeriodAndCategory(from, to, groupBy) {
-  const [rows] = await pool.execute(
-    `SELECT DATE_FORMAT(s.sold_at, ?) AS period, dc.name AS category,
+  const { rows } = await query(
+    `SELECT to_char(s.sold_at, ?) AS period, dc.name AS category,
        SUM(s.quantity * s.unit_price) AS total, SUM(s.quantity) AS quantity
      ${SALES_IN_PERIOD}
      GROUP BY period, dc.name
@@ -29,7 +29,7 @@ export async function listBarByPeriodAndCategory(from, to, groupBy) {
 }
 
 export async function listBarByDrink(from, to) {
-  const [rows] = await pool.execute(
+  const { rows } = await query(
     `SELECT d.name AS drink, dc.name AS category, SUM(s.quantity * s.unit_price) AS total, SUM(s.quantity) AS quantity
      ${SALES_IN_PERIOD}
      GROUP BY d.id, d.name, dc.name`,
@@ -40,8 +40,9 @@ export async function listBarByDrink(from, to) {
 
 // Bookings with at least one night in [from, to]; their nights outside the period are dropped by the service
 export async function listBookings(from, to) {
-  const [rows] = await pool.execute(
-    `SELECT b.check_in AS checkIn, b.check_out AS checkOut, b.total_price AS totalPrice, r.room_type_id AS roomTypeId
+  const { rows } = await query(
+    `SELECT b.check_in AS "checkIn", b.check_out AS "checkOut", b.total_price AS "totalPrice",
+       r.room_type_id AS "roomTypeId"
      FROM bookings b JOIN rooms r ON r.id = b.room_id
      WHERE b.check_in <= ? AND b.check_out > ?`,
     [to, from],

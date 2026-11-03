@@ -190,7 +190,7 @@ test('005 R4: an unknown sort never reaches SQL; it falls back to check-in with 
 
 test('005 FR-016: nearest sorts by distance from today, which is a parameter, not SQL text', () => {
   assert.deepEqual(orderBy({ sort: 'nearest', order: 'asc', today: '2026-03-01' }), {
-    sql: 'ABS(DATEDIFF(b.check_in, ?)) ASC, b.id ASC',
+    sql: 'ABS(b.check_in - ?::date) ASC, b.id ASC',
     params: ['2026-03-01'],
   })
 })

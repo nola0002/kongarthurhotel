@@ -34,469 +34,475 @@ const stay = (checkIn, checkOut) => ({
 })
 
 // Every test uses its own dates against the fixture's 2 rooms, so the order does not matter
-describe('API', { skip: !process.env.DB_HOST && 'needs MySQL: run with docker compose exec backend npm test' }, () => {
-  before(async () => {
-    await setupTestDb()
-    process.env.BOOKING_SYSTEM_API_KEY = API_KEY
-    process.env.BI_API_KEY = BI_KEY
-    const { default: app } = await import('../src/app.js')
-    ;({ pool } = await import('../src/db.js'))
-    const [[{ database }]] = await pool.query('SELECT DATABASE() AS `database`')
-    assert.equal(database, 'kongarthur_test')
-    server = app.listen(0)
-    await once(server, 'listening')
-    base = `http://localhost:${server.address().port}/api`
-    cookie = cookieFrom(await login('test', 'test'))
-  })
+describe(
+  'API',
+  { skip: !process.env.DB_HOST && 'needs PostgreSQL: run with docker compose exec backend npm test' },
+  () => {
+    before(async () => {
+      await setupTestDb()
+      process.env.BOOKING_SYSTEM_API_KEY = API_KEY
+      process.env.BI_API_KEY = BI_KEY
+      const { default: app } = await import('../src/app.js')
+      ;({ pool } = await import('../src/db.js'))
+      const {
+        rows: [{ database }],
+      } = await pool.query('SELECT current_database() AS database')
+      assert.equal(database, 'kongarthur_test')
+      server = app.listen(0)
+      await once(server, 'listening')
+      base = `http://localhost:${server.address().port}/api`
+      cookie = cookieFrom(await login('test', 'test'))
+    })
 
-  after(async () => {
-    server?.close()
-    await pool?.end()
-  })
+    after(async () => {
+      server?.close()
+      await pool?.end()
+    })
 
-  test('FR-015: /auth/me without a session cookie is 401', async () => {
-    const res = await call('/auth/me')
-    assert.equal(res.status, 401)
-    assert.equal((await res.json()).error.code, 'UNAUTHORIZED')
-  })
+    test('FR-015: /auth/me without a session cookie is 401', async () => {
+      const res = await call('/auth/me')
+      assert.equal(res.status, 401)
+      assert.equal((await res.json()).error.code, 'UNAUTHORIZED')
+    })
 
-  test('FR-015: login with a wrong password is 401', async () => {
-    assert.equal((await login('test', 'forkert')).status, 401)
-  })
+    test('FR-015: login with a wrong password is 401', async () => {
+      assert.equal((await login('test', 'forkert')).status, 401)
+    })
 
-  test('FR-015: an unknown user gets the same message as a wrong password', async () => {
-    const unknown = await login('ukendt', 'test')
-    const wrong = await login('test', 'forkert')
-    assert.equal(unknown.status, 401)
-    assert.equal((await unknown.json()).error.message, (await wrong.json()).error.message)
-  })
+    test('FR-015: an unknown user gets the same message as a wrong password', async () => {
+      const unknown = await login('ukendt', 'test')
+      const wrong = await login('test', 'forkert')
+      assert.equal(unknown.status, 401)
+      assert.equal((await unknown.json()).error.message, (await wrong.json()).error.message)
+    })
 
-  test('FR-015: a correct login gives a session cookie that /auth/me accepts', async () => {
-    const res = await login('test', 'test')
-    assert.equal(res.status, 204)
-    const me = await call('/auth/me', { headers: { cookie: cookieFrom(res) } })
-    assert.equal(me.status, 200)
-    assert.deepEqual(await me.json(), { username: 'test' })
-  })
+    test('FR-015: a correct login gives a session cookie that /auth/me accepts', async () => {
+      const res = await login('test', 'test')
+      assert.equal(res.status, 204)
+      const me = await call('/auth/me', { headers: { cookie: cookieFrom(res) } })
+      assert.equal(me.status, 200)
+      assert.deepEqual(await me.json(), { username: 'test' })
+    })
 
-  test('FR-015: after logout the cookie no longer gives access', async () => {
-    const session = cookieFrom(await login('test', 'test'))
-    const logout = await call('/auth/logout', { method: 'POST', headers: { cookie: session } })
-    assert.equal(logout.status, 204)
-    assert.equal((await call('/auth/me', { headers: { cookie: cookieFrom(logout) } })).status, 401)
-  })
+    test('FR-015: after logout the cookie no longer gives access', async () => {
+      const session = cookieFrom(await login('test', 'test'))
+      const logout = await call('/auth/logout', { method: 'POST', headers: { cookie: session } })
+      assert.equal(logout.status, 204)
+      assert.equal((await call('/auth/me', { headers: { cookie: cookieFrom(logout) } })).status, 401)
+    })
 
-  test('FR-003: creating a booking assigns a room and prices it', async () => {
-    const res = await create(stay('2027-01-10', '2027-01-12'))
-    assert.equal(res.status, 201)
-    const booking = await res.json()
-    assert.ok(booking.room.number)
-    assert.equal(booking.totalPrice, 1000) // 2 nights × 500
-  })
+    test('FR-003: creating a booking assigns a room and prices it', async () => {
+      const res = await create(stay('2027-01-10', '2027-01-12'))
+      assert.equal(res.status, 201)
+      const booking = await res.json()
+      assert.ok(booking.room.number)
+      assert.equal(booking.totalPrice, 1000) // 2 nights × 500
+    })
 
-  test('FR-001: total and totalPrice count every match, not only the page', async () => {
-    const guest = { ...stay('2027-09-10', '2027-09-12'), firstName: 'Limit', familyName: 'Testesen' }
-    await create(guest)
-    await create(guest)
-    const res = await authed('/bookings?q=Limit%20Testesen&pageSize=1')
-    const { total, totalPrice, counts, items } = await res.json()
-    assert.equal(items.length, 1)
-    assert.equal(total, 2)
-    assert.equal(totalPrice, 2000) // 2 bookings × 2 nights × 500
-    assert.equal(counts.all, 2)
-  })
+    test('FR-001: total and totalPrice count every match, not only the page', async () => {
+      const guest = { ...stay('2027-09-10', '2027-09-12'), firstName: 'Limit', familyName: 'Testesen' }
+      await create(guest)
+      await create(guest)
+      const res = await authed('/bookings?q=Limit%20Testesen&pageSize=1')
+      const { total, totalPrice, counts, items } = await res.json()
+      assert.equal(items.length, 1)
+      assert.equal(total, 2)
+      assert.equal(totalPrice, 2000) // 2 bookings × 2 nights × 500
+      assert.equal(counts.all, 2)
+    })
 
-  test('005 FR-005, FR-006: sorting covers every match and a page after the last gives the last page', async () => {
-    // 1, 2 and 3 nights at 500 = 500, 1000 and 1500 kr; by price descending, page 2 of size 2 holds only the 500
-    const guest = { firstName: 'Side', familyName: 'Testesen' }
-    for (const [checkIn, checkOut] of [
-      ['2029-01-10', '2029-01-11'],
-      ['2029-01-10', '2029-01-12'],
-      ['2029-01-13', '2029-01-16'],
-    ]) {
-      await create({ ...stay(checkIn, checkOut), ...guest })
-    }
-    const res = await authed('/bookings?q=Side%20Testesen&pageSize=2&page=5&sort=totalPrice&order=desc')
-    assert.equal(res.status, 200)
-    const { page, pageCount, total, items } = await res.json()
-    assert.deepEqual([page, pageCount, total], [2, 2, 3])
-    assert.deepEqual(
-      items.map((item) => item.totalPrice),
-      [500],
-    )
-  })
-
-  test('005 R4: a sort outside the whitelist is 400 on sort', async () => {
-    const res = await authed('/bookings?sort=id%3B%20DROP%20TABLE%20bookings')
-    assert.equal(res.status, 400)
-    assert.equal((await res.json()).error.field, 'sort')
-  })
-
-  test('005 FR-016: a number in q finds the booking id and the room number', async () => {
-    const booking = await (await create(stay('2029-02-10', '2029-02-12'))).json()
-    const byId = await (await authed(`/bookings?q=${booking.id}`)).json()
-    assert.ok(byId.items.some((item) => item.id === booking.id))
-    const period = 'from=2029-02-10&to=2029-02-10'
-    const byRoom = await (await authed(`/bookings?q=${booking.room.number}&${period}`)).json()
-    assert.deepEqual(
-      byRoom.items.map((item) => item.id),
-      [booking.id],
-    )
-  })
-
-  test('004 FR-007: search matches first name, family name and "first family"', async () => {
-    const { id } = await (
-      await create({ ...stay('2028-01-10', '2028-01-12'), firstName: 'Ingrid', familyName: 'Olsen' })
-    ).json()
-    for (const q of ['ingrid', 'OLSEN', 'ingrid%20ols']) {
-      const { items } = await (await authed(`/bookings?q=${q}`)).json()
-      assert.ok(
-        items.some((item) => item.id === id),
-        `q=${q}`,
+    test('005 FR-005, FR-006: sorting covers every match and a page after the last gives the last page', async () => {
+      // 1, 2 and 3 nights at 500 = 500, 1000 and 1500 kr; by price descending, page 2 of size 2 holds only the 500
+      const guest = { firstName: 'Side', familyName: 'Testesen' }
+      for (const [checkIn, checkOut] of [
+        ['2029-01-10', '2029-01-11'],
+        ['2029-01-10', '2029-01-12'],
+        ['2029-01-13', '2029-01-16'],
+      ]) {
+        await create({ ...stay(checkIn, checkOut), ...guest })
+      }
+      const res = await authed('/bookings?q=Side%20Testesen&pageSize=2&page=5&sort=totalPrice&order=desc')
+      assert.equal(res.status, 200)
+      const { page, pageCount, total, items } = await res.json()
+      assert.deepEqual([page, pageCount, total], [2, 2, 3])
+      assert.deepEqual(
+        items.map((item) => item.totalPrice),
+        [500],
       )
-    }
-  })
+    })
 
-  test('004 FR-006: a booking response has firstName and familyName and no guestName', async () => {
-    const booking = await (await create(stay('2028-01-20', '2028-01-22'))).json()
-    assert.equal(booking.firstName, 'Test')
-    assert.equal(booking.familyName, 'Gæst')
-    assert.equal('guestName' in booking, false)
-  })
+    test('005 R4: a sort outside the whitelist is 400 on sort', async () => {
+      const res = await authed('/bookings?sort=id%3B%20DROP%20TABLE%20bookings')
+      assert.equal(res.status, 400)
+      assert.equal((await res.json()).error.field, 'sort')
+    })
 
-  test('FR-007: a departure day may be another booking’s arrival day in the same room', async () => {
-    const first = await (await create(stay('2027-02-10', '2027-02-12'))).json()
-    const res = await create(stay('2027-02-12', '2027-02-14'))
-    assert.equal(res.status, 201)
-    assert.equal((await res.json()).room.number, first.room.number)
-  })
+    test('005 FR-016: a number in q finds the booking id and the room number', async () => {
+      const booking = await (await create(stay('2029-02-10', '2029-02-12'))).json()
+      const byId = await (await authed(`/bookings?q=${booking.id}`)).json()
+      assert.ok(byId.items.some((item) => item.id === booking.id))
+      const period = 'from=2029-02-10&to=2029-02-10'
+      const byRoom = await (await authed(`/bookings?q=${booking.room.number}&${period}`)).json()
+      assert.deepEqual(
+        byRoom.items.map((item) => item.id),
+        [booking.id],
+      )
+    })
 
-  test('FR-007: rejects booking when every room of the type is taken', async () => {
-    assert.equal((await create(stay('2027-03-10', '2027-03-12'))).status, 201)
-    assert.equal((await create(stay('2027-03-11', '2027-03-13'))).status, 201)
-    const res = await create(stay('2027-03-11', '2027-03-12'))
-    assert.equal(res.status, 409)
-    assert.equal((await res.json()).error.code, 'ROOM_TYPE_FULLY_BOOKED')
-  })
+    test('004 FR-007: search matches first name, family name and "first family"', async () => {
+      const { id } = await (
+        await create({ ...stay('2028-01-10', '2028-01-12'), firstName: 'Ingrid', familyName: 'Olsen' })
+      ).json()
+      for (const q of ['ingrid', 'OLSEN', 'ingrid%20ols']) {
+        const { items } = await (await authed(`/bookings?q=${q}`)).json()
+        assert.ok(
+          items.some((item) => item.id === id),
+          `q=${q}`,
+        )
+      }
+    })
 
-  // 5 rather than 2 parallel requests, so the test reliably fails if the room lock is removed
-  test('FR-007: simultaneous bookings for the last room give one 201 and the rest 409', async () => {
-    assert.equal((await create(stay('2027-04-10', '2027-04-12'))).status, 201)
-    const responses = await Promise.all(Array.from({ length: 5 }, () => create(stay('2027-04-10', '2027-04-12'))))
-    assert.deepEqual(responses.map((res) => res.status).sort(), [201, 409, 409, 409, 409])
-  })
+    test('004 FR-006: a booking response has firstName and familyName and no guestName', async () => {
+      const booking = await (await create(stay('2028-01-20', '2028-01-22'))).json()
+      assert.equal(booking.firstName, 'Test')
+      assert.equal(booking.familyName, 'Gæst')
+      assert.equal('guestName' in booking, false)
+    })
 
-  test('FR-003: a departure on the arrival day is 400 on checkOut', async () => {
-    const res = await create(stay('2027-05-10', '2027-05-10'))
-    assert.equal(res.status, 400)
-    const { error } = await res.json()
-    assert.equal(error.code, 'VALIDATION_ERROR')
-    assert.equal(error.field, 'checkOut')
-  })
+    test('FR-007: a departure day may be another booking’s arrival day in the same room', async () => {
+      const first = await (await create(stay('2027-02-10', '2027-02-12'))).json()
+      const res = await create(stay('2027-02-12', '2027-02-14'))
+      assert.equal(res.status, 201)
+      assert.equal((await res.json()).room.number, first.room.number)
+    })
 
-  test('FR-006: 0 guests is 400 on guestCount', async () => {
-    const res = await create({ ...stay('2027-05-10', '2027-05-12'), guestCount: 0 })
-    assert.equal(res.status, 400)
-    const { error } = await res.json()
-    assert.equal(error.code, 'VALIDATION_ERROR')
-    assert.equal(error.field, 'guestCount')
-  })
+    test('FR-007: rejects booking when every room of the type is taken', async () => {
+      assert.equal((await create(stay('2027-03-10', '2027-03-12'))).status, 201)
+      assert.equal((await create(stay('2027-03-11', '2027-03-13'))).status, 201)
+      const res = await create(stay('2027-03-11', '2027-03-12'))
+      assert.equal(res.status, 409)
+      assert.equal((await res.json()).error.code, 'ROOM_TYPE_FULLY_BOOKED')
+    })
 
-  test('FR-005: deleting a booking removes it', async () => {
-    const { id } = await (await create(stay('2027-06-10', '2027-06-12'))).json()
-    assert.equal((await authed(`/bookings/${id}`, { method: 'DELETE' })).status, 204)
-    assert.equal((await authed(`/bookings/${id}`)).status, 404)
-  })
+    // 5 rather than 2 parallel requests, so the test reliably fails if the room lock is removed
+    test('FR-007: simultaneous bookings for the last room give one 201 and the rest 409', async () => {
+      assert.equal((await create(stay('2027-04-10', '2027-04-12'))).status, 201)
+      const responses = await Promise.all(Array.from({ length: 5 }, () => create(stay('2027-04-10', '2027-04-12'))))
+      assert.deepEqual(responses.map((res) => res.status).sort(), [201, 409, 409, 409, 409])
+    })
 
-  test('FR-005: DELETE and PUT on an already deleted booking are 404', async () => {
-    const { id } = await (await create(stay('2027-06-20', '2027-06-22'))).json()
-    await authed(`/bookings/${id}`, { method: 'DELETE' })
-    for (const res of [
-      await authed(`/bookings/${id}`, { method: 'DELETE' }),
-      await authed(`/bookings/${id}`, { method: 'PUT', body: stay('2027-06-20', '2027-06-23') }),
-    ]) {
-      assert.equal(res.status, 404)
+    test('FR-003: a departure on the arrival day is 400 on checkOut', async () => {
+      const res = await create(stay('2027-05-10', '2027-05-10'))
+      assert.equal(res.status, 400)
       const { error } = await res.json()
-      assert.equal(error.code, 'NOT_FOUND')
-      assert.equal(error.message, 'Bookingen findes ikke længere')
-    }
-  })
-
-  test('FR-010a: a bar sale is kept when its booking is deleted', async () => {
-    const day = today()
-    const tomorrow = new Date(Date.parse(day) + 86_400_000).toISOString().slice(0, 10)
-    const booking = await (await create(stay(day, tomorrow))).json()
-    const saleRes = await authed('/bar-sales', {
-      method: 'POST',
-      body: { drinkId: 1, quantity: 2, bookingId: booking.id },
+      assert.equal(error.code, 'VALIDATION_ERROR')
+      assert.equal(error.field, 'checkOut')
     })
-    assert.equal(saleRes.status, 201)
-    const sale = await saleRes.json()
-    await authed(`/bookings/${booking.id}`, { method: 'DELETE' })
-    const { items } = await (await authed(`/bar-sales?date=${day}`)).json()
-    assert.equal(items.find((item) => item.id === sale.id).bookingId, null)
-  })
 
-  test('FR-010: quantity 0 is 400 on quantity', async () => {
-    const res = await authed('/bar-sales', { method: 'POST', body: { drinkId: 1, quantity: 0 } })
-    assert.equal(res.status, 400)
-    const { error } = await res.json()
-    assert.equal(error.code, 'VALIDATION_ERROR')
-    assert.equal(error.field, 'quantity')
-  })
-
-  test('FR-010: a day without sales has total 0 and no items', async () => {
-    const res = await authed('/bar-sales?date=2027-06-01')
-    assert.deepEqual(await res.json(), { total: 0, items: [] })
-  })
-
-  test('FR-013: the booking system key creates a booking without a cookie', async () => {
-    const res = await call('/bookings', {
-      method: 'POST',
-      body: stay('2027-07-10', '2027-07-12'),
-      headers: { 'X-API-Key': API_KEY },
+    test('FR-006: 0 guests is 400 on guestCount', async () => {
+      const res = await create({ ...stay('2027-05-10', '2027-05-12'), guestCount: 0 })
+      assert.equal(res.status, 400)
+      const { error } = await res.json()
+      assert.equal(error.code, 'VALIDATION_ERROR')
+      assert.equal(error.field, 'guestCount')
     })
-    assert.equal(res.status, 201)
-    assert.equal((await res.json()).source, 'booking_system')
-  })
 
-  test('FR-013: a wrong key is 401', async () => {
-    const res = await call('/bookings', {
-      method: 'POST',
-      body: stay('2027-07-20', '2027-07-22'),
-      headers: { 'X-API-Key': 'x'.repeat(40) },
+    test('FR-005: deleting a booking removes it', async () => {
+      const { id } = await (await create(stay('2027-06-10', '2027-06-12'))).json()
+      assert.equal((await authed(`/bookings/${id}`, { method: 'DELETE' })).status, 204)
+      assert.equal((await authed(`/bookings/${id}`)).status, 404)
     })
-    assert.equal(res.status, 401)
-  })
 
-  test('FR-013: a sold-out type via the key is 409', async () => {
-    await create(stay('2027-08-10', '2027-08-12'))
-    await create(stay('2027-08-10', '2027-08-12'))
-    const res = await call('/bookings', {
-      method: 'POST',
-      body: stay('2027-08-10', '2027-08-12'),
-      headers: { 'X-API-Key': API_KEY },
+    test('FR-005: DELETE and PUT on an already deleted booking are 404', async () => {
+      const { id } = await (await create(stay('2027-06-20', '2027-06-22'))).json()
+      await authed(`/bookings/${id}`, { method: 'DELETE' })
+      for (const res of [
+        await authed(`/bookings/${id}`, { method: 'DELETE' }),
+        await authed(`/bookings/${id}`, { method: 'PUT', body: stay('2027-06-20', '2027-06-23') }),
+      ]) {
+        assert.equal(res.status, 404)
+        const { error } = await res.json()
+        assert.equal(error.code, 'NOT_FOUND')
+        assert.equal(error.message, 'Bookingen findes ikke længere')
+      }
     })
-    assert.equal(res.status, 409)
-    assert.equal((await res.json()).error.code, 'ROOM_TYPE_FULLY_BOOKED')
-  })
 
-  test('004 FR-013: the booking system key can update a booking and the source is kept', async () => {
-    const key = { 'X-API-Key': API_KEY }
-    const { id } = await (
-      await call('/bookings', { method: 'POST', body: stay('2028-02-10', '2028-02-12'), headers: key })
-    ).json()
-    const res = await call(`/bookings/${id}`, { method: 'PUT', body: stay('2028-02-10', '2028-02-13'), headers: key })
-    assert.equal(res.status, 200)
-    const booking = await res.json()
-    assert.equal(booking.checkOut, '2028-02-13')
-    assert.equal(booking.source, 'booking_system')
-  })
-
-  test('004 FR-013: the booking system key can update a back-office booking without changing its source', async () => {
-    const { id } = await (await create(stay('2028-02-20', '2028-02-22'))).json()
-    const res = await call(`/bookings/${id}`, {
-      method: 'PUT',
-      body: stay('2028-02-20', '2028-02-23'),
-      headers: { 'X-API-Key': API_KEY },
+    test('FR-010a: a bar sale is kept when its booking is deleted', async () => {
+      const day = today()
+      const tomorrow = new Date(Date.parse(day) + 86_400_000).toISOString().slice(0, 10)
+      const booking = await (await create(stay(day, tomorrow))).json()
+      const saleRes = await authed('/bar-sales', {
+        method: 'POST',
+        body: { drinkId: 1, quantity: 2, bookingId: booking.id },
+      })
+      assert.equal(saleRes.status, 201)
+      const sale = await saleRes.json()
+      await authed(`/bookings/${booking.id}`, { method: 'DELETE' })
+      const { items } = await (await authed(`/bar-sales?date=${day}`)).json()
+      assert.equal(items.find((item) => item.id === sale.id).bookingId, null)
     })
-    assert.equal(res.status, 200)
-    assert.equal((await res.json()).source, 'backoffice')
-  })
 
-  test('004 FR-013: the booking system key can delete a booking', async () => {
-    const { id } = await (await create(stay('2028-03-10', '2028-03-12'))).json()
-    assert.equal((await call(`/bookings/${id}`, { method: 'DELETE', headers: { 'X-API-Key': API_KEY } })).status, 204)
-    assert.equal((await authed(`/bookings/${id}`)).status, 404)
-  })
-
-  test('004 FR-013: a wrong key cannot update or delete', async () => {
-    const before = await (await create(stay('2028-03-20', '2028-03-22'))).json()
-    const wrong = { 'X-API-Key': 'x'.repeat(40) }
-    const put = await call(`/bookings/${before.id}`, {
-      method: 'PUT',
-      body: stay('2028-03-20', '2028-03-25'),
-      headers: wrong,
+    test('FR-010: quantity 0 is 400 on quantity', async () => {
+      const res = await authed('/bar-sales', { method: 'POST', body: { drinkId: 1, quantity: 0 } })
+      assert.equal(res.status, 400)
+      const { error } = await res.json()
+      assert.equal(error.code, 'VALIDATION_ERROR')
+      assert.equal(error.field, 'quantity')
     })
-    assert.equal(put.status, 401)
-    assert.equal((await call(`/bookings/${before.id}`, { method: 'DELETE', headers: wrong })).status, 401)
-    assert.deepEqual(await (await authed(`/bookings/${before.id}`)).json(), before)
-  })
 
-  test('004 FR-013: the booking system key cannot read bookings', async () => {
-    const { id } = await (await create(stay('2028-04-10', '2028-04-12'))).json()
-    assert.equal((await call('/bookings', { headers: { 'X-API-Key': API_KEY } })).status, 401)
-    assert.equal((await call(`/bookings/${id}`, { headers: { 'X-API-Key': API_KEY } })).status, 401)
-  })
+    test('FR-010: a day without sales has total 0 and no items', async () => {
+      const res = await authed('/bar-sales?date=2027-06-01')
+      assert.deepEqual(await res.json(), { total: 0, items: [] })
+    })
 
-  test('FR-018 (003): the reception overview needs a session; the booking system key is 401', async () => {
-    assert.equal((await call('/reception/overview')).status, 401)
-    assert.equal((await call('/reception/overview', { headers: { 'X-API-Key': API_KEY } })).status, 401)
-  })
+    test('FR-013: the booking system key creates a booking without a cookie', async () => {
+      const res = await call('/bookings', {
+        method: 'POST',
+        body: stay('2027-07-10', '2027-07-12'),
+        headers: { 'X-API-Key': API_KEY },
+      })
+      assert.equal(res.status, 201)
+      assert.equal((await res.json()).source, 'booking_system')
+    })
 
-  test('FR-002 (003): the overview has free + occupied = total for the fixture’s room type', async () => {
-    const res = await authed('/reception/overview?date=2027-01-10')
-    assert.equal(res.status, 200)
-    const [type] = (await res.json()).rooms
-    assert.equal(type.total, 2)
-    assert.equal(type.free + type.occupied, type.total)
-  })
+    test('FR-013: a wrong key is 401', async () => {
+      const res = await call('/bookings', {
+        method: 'POST',
+        body: stay('2027-07-20', '2027-07-22'),
+        headers: { 'X-API-Key': 'x'.repeat(40) },
+      })
+      assert.equal(res.status, 401)
+    })
 
-  test('FR-005 (003): a room plan of 32 days is 400 on days', async () => {
-    const res = await authed('/reception/room-plan?days=32')
-    assert.equal(res.status, 400)
-    const { error } = await res.json()
-    assert.equal(error.code, 'VALIDATION_ERROR')
-    assert.equal(error.field, 'days')
-  })
+    test('FR-013: a sold-out type via the key is 409', async () => {
+      await create(stay('2027-08-10', '2027-08-12'))
+      await create(stay('2027-08-10', '2027-08-12'))
+      const res = await call('/bookings', {
+        method: 'POST',
+        body: stay('2027-08-10', '2027-08-12'),
+        headers: { 'X-API-Key': API_KEY },
+      })
+      assert.equal(res.status, 409)
+      assert.equal((await res.json()).error.code, 'ROOM_TYPE_FULLY_BOOKED')
+    })
 
-  test('FR-018 (003): the room plan without a session is 401', async () => {
-    assert.equal((await call('/reception/room-plan')).status, 401)
-  })
+    test('004 FR-013: the booking system key can update a booking and the source is kept', async () => {
+      const key = { 'X-API-Key': API_KEY }
+      const { id } = await (
+        await call('/bookings', { method: 'POST', body: stay('2028-02-10', '2028-02-12'), headers: key })
+      ).json()
+      const res = await call(`/bookings/${id}`, { method: 'PUT', body: stay('2028-02-10', '2028-02-13'), headers: key })
+      assert.equal(res.status, 200)
+      const booking = await res.json()
+      assert.equal(booking.checkOut, '2028-02-13')
+      assert.equal(booking.source, 'booking_system')
+    })
 
-  const score = (id, body, headers) => authed(`/bookings/${id}/satisfaction`, { method: 'PUT', body, headers })
+    test('004 FR-013: the booking system key can update a back-office booking without changing its source', async () => {
+      const { id } = await (await create(stay('2028-02-20', '2028-02-22'))).json()
+      const res = await call(`/bookings/${id}`, {
+        method: 'PUT',
+        body: stay('2028-02-20', '2028-02-23'),
+        headers: { 'X-API-Key': API_KEY },
+      })
+      assert.equal(res.status, 200)
+      assert.equal((await res.json()).source, 'backoffice')
+    })
 
-  test('FR-018 (003): satisfaction needs a session; no cookie and the booking system key are 401', async () => {
-    const { id } = await (await create(stay('2028-05-10', '2028-05-12'))).json()
-    const url = `/bookings/${id}/satisfaction`
-    assert.equal((await call(url, { method: 'PUT', body: { score: 4 } })).status, 401)
-    const withKey = await call(url, { method: 'PUT', body: { score: 4 }, headers: { 'X-API-Key': API_KEY } })
-    assert.equal(withKey.status, 401)
-  })
+    test('004 FR-013: the booking system key can delete a booking', async () => {
+      const { id } = await (await create(stay('2028-03-10', '2028-03-12'))).json()
+      assert.equal((await call(`/bookings/${id}`, { method: 'DELETE', headers: { 'X-API-Key': API_KEY } })).status, 204)
+      assert.equal((await authed(`/bookings/${id}`)).status, 404)
+    })
 
-  test('FR-011 (003): a score of 6 is 400 on score', async () => {
-    const { id } = await (await create(stay('2028-05-20', '2028-05-22'))).json()
-    const res = await score(id, { score: 6 })
-    assert.equal(res.status, 400)
-    assert.equal((await res.json()).error.field, 'score')
-  })
+    test('004 FR-013: a wrong key cannot update or delete', async () => {
+      const before = await (await create(stay('2028-03-20', '2028-03-22'))).json()
+      const wrong = { 'X-API-Key': 'x'.repeat(40) }
+      const put = await call(`/bookings/${before.id}`, {
+        method: 'PUT',
+        body: stay('2028-03-20', '2028-03-25'),
+        headers: wrong,
+      })
+      assert.equal(put.status, 401)
+      assert.equal((await call(`/bookings/${before.id}`, { method: 'DELETE', headers: wrong })).status, 401)
+      assert.deepEqual(await (await authed(`/bookings/${before.id}`)).json(), before)
+    })
 
-  test('FR-011 (003): a score on an upcoming booking is 422 BOOKING_NOT_DEPARTED', async () => {
-    const { id } = await (await create(stay('2028-06-10', '2028-06-12'))).json()
-    const res = await score(id, { score: 4 })
-    assert.equal(res.status, 422)
-    assert.equal((await res.json()).error.code, 'BOOKING_NOT_DEPARTED')
-  })
+    test('004 FR-013: the booking system key cannot read bookings', async () => {
+      const { id } = await (await create(stay('2028-04-10', '2028-04-12'))).json()
+      assert.equal((await call('/bookings', { headers: { 'X-API-Key': API_KEY } })).status, 401)
+      assert.equal((await call(`/bookings/${id}`, { headers: { 'X-API-Key': API_KEY } })).status, 401)
+    })
 
-  test('FR-011 (003): a score on a booking departing today is saved', async () => {
-    const { id } = await (await create(stay(addDays(today(), -2), today()))).json()
-    const res = await score(id, { score: 4 })
-    assert.equal(res.status, 200)
-    assert.equal((await res.json()).satisfactionScore, 4)
-  })
+    test('FR-018 (003): the reception overview needs a session; the booking system key is 401', async () => {
+      assert.equal((await call('/reception/overview')).status, 401)
+      assert.equal((await call('/reception/overview', { headers: { 'X-API-Key': API_KEY } })).status, 401)
+    })
 
-  const post = (id, action, headers) => authed(`/bookings/${id}/${action}`, { method: 'POST', headers })
+    test('FR-002 (003): the overview has free + occupied = total for the fixture’s room type', async () => {
+      const res = await authed('/reception/overview?date=2027-01-10')
+      assert.equal(res.status, 200)
+      const [type] = (await res.json()).rooms
+      assert.equal(type.total, 2)
+      assert.equal(type.free + type.occupied, type.total)
+    })
 
-  test('005 FR-003: check-in today is saved once, a second check-in is 422 INVALID_STATUS', async () => {
-    const { id } = await (await create(stay(today(), addDays(today(), 1)))).json()
-    const res = await post(id, 'check-in')
-    assert.equal(res.status, 200)
-    const booking = await res.json()
-    assert.equal(booking.status, 'in_house')
-    assert.match(booking.checkedInAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)
-    const again = await post(id, 'check-in')
-    assert.equal(again.status, 422)
-    assert.equal((await again.json()).error.code, 'INVALID_STATUS')
-  })
+    test('FR-005 (003): a room plan of 32 days is 400 on days', async () => {
+      const res = await authed('/reception/room-plan?days=32')
+      assert.equal(res.status, 400)
+      const { error } = await res.json()
+      assert.equal(error.code, 'VALIDATION_ERROR')
+      assert.equal(error.field, 'days')
+    })
 
-  test('005 FR-003: check-out on the departure day gives checked_out', async () => {
-    const { id } = await (await create(stay(addDays(today(), -1), today()))).json()
-    const res = await post(id, 'check-out')
-    assert.equal(res.status, 200)
-    assert.equal((await res.json()).status, 'checked_out')
-  })
+    test('FR-018 (003): the room plan without a session is 401', async () => {
+      assert.equal((await call('/reception/room-plan')).status, 401)
+    })
 
-  test('005 FR-021: check-in needs a session; the booking system key is 401', async () => {
-    const { id } = await (await create(stay('2029-03-10', '2029-03-12'))).json()
-    const res = await call(`/bookings/${id}/check-in`, { method: 'POST', headers: { 'X-API-Key': API_KEY } })
-    assert.equal(res.status, 401)
-  })
+    const score = (id, body, headers) => authed(`/bookings/${id}/satisfaction`, { method: 'PUT', body, headers })
 
-  test('005 FR-008, FR-009: the folio has a line per night summing to the price, and the bill', async () => {
-    const { id } = await (await create(stay('2029-04-10', '2029-04-13'))).json()
-    const res = await authed(`/bookings/${id}/folio`)
-    assert.equal(res.status, 200)
-    const { nights, bill } = await res.json()
-    assert.deepEqual(
-      nights.map((night) => [night.date, night.season, night.price]),
-      [
-        ['2029-04-10', 'Helår', 500],
-        ['2029-04-11', 'Helår', 500],
-        ['2029-04-12', 'Helår', 500],
-      ],
-    )
-    assert.deepEqual(bill, { stay: 1500, bar: 0, total: 1500 })
-  })
+    test('FR-018 (003): satisfaction needs a session; no cookie and the booking system key are 401', async () => {
+      const { id } = await (await create(stay('2028-05-10', '2028-05-12'))).json()
+      const url = `/bookings/${id}/satisfaction`
+      assert.equal((await call(url, { method: 'PUT', body: { score: 4 } })).status, 401)
+      const withKey = await call(url, { method: 'PUT', body: { score: 4 }, headers: { 'X-API-Key': API_KEY } })
+      assert.equal(withKey.status, 401)
+    })
 
-  // Only status and shape are checked, so the tests do not depend on bookings made by other tests
-  test('FT17: the BI key reads /analytics/kpis without a cookie', async () => {
-    const res = await call('/analytics/kpis', { headers: { Authorization: `Bearer ${BI_KEY}` } })
-    assert.equal(res.status, 200)
-    assert.ok(Array.isArray(await res.json()))
-  })
+    test('FR-011 (003): a score of 6 is 400 on score', async () => {
+      const { id } = await (await create(stay('2028-05-20', '2028-05-22'))).json()
+      const res = await score(id, { score: 6 })
+      assert.equal(res.status, 400)
+      assert.equal((await res.json()).error.field, 'score')
+    })
 
-  test('FT17: /analytics without a cookie or key is 401', async () => {
-    const res = await call('/analytics/kpis')
-    assert.equal(res.status, 401)
-    assert.equal((await res.json()).error.code, 'UNAUTHORIZED')
-  })
+    test('FR-011 (003): a score on an upcoming booking is 422 BOOKING_NOT_DEPARTED', async () => {
+      const { id } = await (await create(stay('2028-06-10', '2028-06-12'))).json()
+      const res = await score(id, { score: 4 })
+      assert.equal(res.status, 422)
+      assert.equal((await res.json()).error.code, 'BOOKING_NOT_DEPARTED')
+    })
 
-  test('FT17: a wrong BI key is 401', async () => {
-    assert.equal(
-      (await call('/analytics/kpis', { headers: { Authorization: `Bearer ${'x'.repeat(38)}` } })).status,
-      401,
-    )
-  })
+    test('FR-011 (003): a score on a booking departing today is saved', async () => {
+      const { id } = await (await create(stay(addDays(today(), -2), today()))).json()
+      const res = await score(id, { score: 4 })
+      assert.equal(res.status, 200)
+      assert.equal((await res.json()).satisfactionScore, 4)
+    })
 
-  test('FT17: the BI key does not open the back office', async () => {
-    assert.equal((await call('/bookings', { headers: { Authorization: `Bearer ${BI_KEY}` } })).status, 401)
-  })
+    const post = (id, action, headers) => authed(`/bookings/${id}/${action}`, { method: 'POST', headers })
 
-  test('FT17: the booking system key does not open /analytics', async () => {
-    assert.equal((await call('/analytics/kpis', { headers: { 'X-API-Key': API_KEY } })).status, 401)
-  })
+    test('005 FR-003: check-in today is saved once, a second check-in is 422 INVALID_STATUS', async () => {
+      const { id } = await (await create(stay(today(), addDays(today(), 1)))).json()
+      const res = await post(id, 'check-in')
+      assert.equal(res.status, 200)
+      const booking = await res.json()
+      assert.equal(booking.status, 'in_house')
+      assert.match(booking.checkedInAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)
+      const again = await post(id, 'check-in')
+      assert.equal(again.status, 422)
+      assert.equal((await again.json()).error.code, 'INVALID_STATUS')
+    })
 
-  test('FT17: a logged-in user can read /analytics', async () => {
-    const res = await authed('/analytics/room-nights')
-    assert.equal(res.status, 200)
-    assert.ok(Array.isArray(await res.json()))
-  })
+    test('005 FR-003: check-out on the departure day gives checked_out', async () => {
+      const { id } = await (await create(stay(addDays(today(), -1), today()))).json()
+      const res = await post(id, 'check-out')
+      assert.equal(res.status, 200)
+      assert.equal((await res.json()).status, 'checked_out')
+    })
 
-  const DIMENSIONS = ['calendar', 'room-types', 'countries']
+    test('005 FR-021: check-in needs a session; the booking system key is 401', async () => {
+      const { id } = await (await create(stay('2029-03-10', '2029-03-12'))).json()
+      const res = await call(`/bookings/${id}/check-in`, { method: 'POST', headers: { 'X-API-Key': API_KEY } })
+      assert.equal(res.status, 401)
+    })
 
-  test('FT16: /analytics lists the five facts and the three dimensions', async () => {
-    const res = await call('/analytics', { headers: { Authorization: `Bearer ${BI_KEY}` } })
-    assert.equal(res.status, 200)
-    const tables = await res.json()
-    assert.deepEqual(
-      tables.map((row) => row.table),
-      ['room-nights', 'occupancy', 'bookings', 'bar-sales', 'kpis', ...DIMENSIONS],
-    )
-    assert.ok(tables.every((row) => row.path === `/api/analytics/${row.table}`))
-  })
+    test('005 FR-008, FR-009: the folio has a line per night summing to the price, and the bill', async () => {
+      const { id } = await (await create(stay('2029-04-10', '2029-04-13'))).json()
+      const res = await authed(`/bookings/${id}/folio`)
+      assert.equal(res.status, 200)
+      const { nights, bill } = await res.json()
+      assert.deepEqual(
+        nights.map((night) => [night.date, night.season, night.price]),
+        [
+          ['2029-04-10', 'Helår', 500],
+          ['2029-04-11', 'Helår', 500],
+          ['2029-04-12', 'Helår', 500],
+        ],
+      )
+      assert.deepEqual(bill, { stay: 1500, bar: 0, total: 1500 })
+    })
 
-  test('FT17: the BI key reads the dimensions, and they are 401 without a key', async () => {
-    for (const table of DIMENSIONS) {
-      const res = await call(`/analytics/${table}`, { headers: { Authorization: `Bearer ${BI_KEY}` } })
-      assert.equal(res.status, 200, table)
-      assert.ok((await res.json()).length > 0, table)
-      assert.equal((await call(`/analytics/${table}`)).status, 401, table)
-    }
-  })
+    // Only status and shape are checked, so the tests do not depend on bookings made by other tests
+    test('FT17: the BI key reads /analytics/kpis without a cookie', async () => {
+      const res = await call('/analytics/kpis', { headers: { Authorization: `Bearer ${BI_KEY}` } })
+      assert.equal(res.status, 200)
+      assert.ok(Array.isArray(await res.json()))
+    })
 
-  test('FT16: the room-type dimension counts rooms per type, 0 for a type without rooms', async () => {
-    const res = await authed('/analytics/room-types')
-    assert.deepEqual(await res.json(), [
-      { roomType: 'Dobbeltværelse', capacity: 2, rooms: 2 },
-      { roomType: 'Suite', capacity: 4, rooms: 0 },
-    ])
-  })
+    test('FT17: /analytics without a cookie or key is 401', async () => {
+      const res = await call('/analytics/kpis')
+      assert.equal(res.status, 401)
+      assert.equal((await res.json()).error.code, 'UNAUTHORIZED')
+    })
 
-  test('FT16: the country dimension lists every country by name, also those without bookings', async () => {
-    const res = await authed('/analytics/countries')
-    assert.deepEqual(await res.json(), [
-      { countryCode: 'DK', country: 'Danmark' },
-      { countryCode: 'SE', country: 'Sverige' },
-    ])
-  })
-})
+    test('FT17: a wrong BI key is 401', async () => {
+      assert.equal(
+        (await call('/analytics/kpis', { headers: { Authorization: `Bearer ${'x'.repeat(38)}` } })).status,
+        401,
+      )
+    })
+
+    test('FT17: the BI key does not open the back office', async () => {
+      assert.equal((await call('/bookings', { headers: { Authorization: `Bearer ${BI_KEY}` } })).status, 401)
+    })
+
+    test('FT17: the booking system key does not open /analytics', async () => {
+      assert.equal((await call('/analytics/kpis', { headers: { 'X-API-Key': API_KEY } })).status, 401)
+    })
+
+    test('FT17: a logged-in user can read /analytics', async () => {
+      const res = await authed('/analytics/room-nights')
+      assert.equal(res.status, 200)
+      assert.ok(Array.isArray(await res.json()))
+    })
+
+    const DIMENSIONS = ['calendar', 'room-types', 'countries']
+
+    test('FT16: /analytics lists the five facts and the three dimensions', async () => {
+      const res = await call('/analytics', { headers: { Authorization: `Bearer ${BI_KEY}` } })
+      assert.equal(res.status, 200)
+      const tables = await res.json()
+      assert.deepEqual(
+        tables.map((row) => row.table),
+        ['room-nights', 'occupancy', 'bookings', 'bar-sales', 'kpis', ...DIMENSIONS],
+      )
+      assert.ok(tables.every((row) => row.path === `/api/analytics/${row.table}`))
+    })
+
+    test('FT17: the BI key reads the dimensions, and they are 401 without a key', async () => {
+      for (const table of DIMENSIONS) {
+        const res = await call(`/analytics/${table}`, { headers: { Authorization: `Bearer ${BI_KEY}` } })
+        assert.equal(res.status, 200, table)
+        assert.ok((await res.json()).length > 0, table)
+        assert.equal((await call(`/analytics/${table}`)).status, 401, table)
+      }
+    })
+
+    test('FT16: the room-type dimension counts rooms per type, 0 for a type without rooms', async () => {
+      const res = await authed('/analytics/room-types')
+      assert.deepEqual(await res.json(), [
+        { roomType: 'Dobbeltværelse', capacity: 2, rooms: 2 },
+        { roomType: 'Suite', capacity: 4, rooms: 0 },
+      ])
+    })
+
+    test('FT16: the country dimension lists every country by name, also those without bookings', async () => {
+      const res = await authed('/analytics/countries')
+      assert.deepEqual(await res.json(), [
+        { countryCode: 'DK', country: 'Danmark' },
+        { countryCode: 'SE', country: 'Sverige' },
+      ])
+    })
+  },
+)
