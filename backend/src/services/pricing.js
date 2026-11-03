@@ -9,6 +9,15 @@ export function* eachNight(checkIn, checkOut) {
   for (let ms = toUtc(checkIn); ms < toUtc(checkOut); ms += DAY_MS) yield toIso(ms)
 }
 
+// One calendar covering all stays, so a stay's nights are a slice of it. Over many years ~1.3M room-nights fall on a
+// few thousand dates, and formatting each night's date anew was most of the BI and revenue response time (006 FR-011)
+export function stayCalendar(stays) {
+  const first = stays.reduce((min, stay) => (stay.checkIn < min ? stay.checkIn : min), '9999-12-31')
+  const last = stays.reduce((max, stay) => (stay.checkOut > max ? stay.checkOut : max), first)
+  const indexOf = (date) => (toUtc(date) - toUtc(first)) / DAY_MS
+  return { dates: [...eachNight(first, last)], span: (stay) => [indexOf(stay.checkIn), indexOf(stay.checkOut)] }
+}
+
 export const addDays = (isoDate, n) => toIso(toUtc(isoDate) + n * DAY_MS)
 
 export const periodOn = (periods, date) => periods.find((p) => p.startDate <= date && date <= p.endDate)

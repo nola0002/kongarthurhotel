@@ -1,6 +1,6 @@
 import { toKr } from '../money.js'
 import { nights } from './bookingService.js'
-import { eachNight, periodOn } from './pricing.js'
+import { eachNight, periodOn, stayCalendar } from './pricing.js'
 
 const yearOf = (date) => Number(date.slice(0, 4))
 export const sum = (values) => values.reduce((a, b) => a + b, 0)
@@ -41,9 +41,13 @@ export function createAnalyticsService({ analyticsRepo }) {
       analyticsRepo.listRoomTypes(),
     ])
     const pricesByType = new Map(roomTypes.map((type) => [type.name, type.prices]))
+    // Each date is also matched to its season once, not once per night
+    const calendar = stayCalendar(bookings)
+    const seasonsOfCalendar = calendar.dates.map((date) => periodOn(periods, date))
     const roomNights = bookings.flatMap((booking) => {
-      const dates = [...eachNight(booking.checkIn, booking.checkOut)]
-      const seasons = dates.map((date) => periodOn(periods, date))
+      const [start, end] = calendar.span(booking)
+      const dates = calendar.dates.slice(start, end)
+      const seasons = seasonsOfCalendar.slice(start, end)
       const prices = pricesByType.get(booking.roomType)
       const revenues = allocateRevenue(
         booking.totalPriceOre,
@@ -62,16 +66,18 @@ export function createAnalyticsService({ analyticsRepo }) {
 
   // FT5: available = rooms of the type on every date a season period covers; rooms out of service are not modelled
   function occupancyRows({ periods, roomTypes, roomNights }) {
+    // date → room type → count; nested instead of a joined "date|type" key, which built a new string per night
     const sold = new Map()
-    for (const night of roomNights) {
-      const key = `${night.date}|${night.roomType}`
-      sold.set(key, (sold.get(key) ?? 0) + 1)
+    for (const { date, roomType } of roomNights) {
+      if (!sold.has(date)) sold.set(date, new Map())
+      const byType = sold.get(date)
+      byType.set(roomType, (byType.get(roomType) ?? 0) + 1)
     }
     return periods.flatMap((period) =>
       // eachNight is half-open, so the period's end date is added to include it
       [...eachNight(period.startDate, period.endDate), period.endDate].flatMap((date) =>
         roomTypes.map((type) => {
-          const soldRoomNights = sold.get(`${date}|${type.name}`) ?? 0
+          const soldRoomNights = sold.get(date)?.get(type.name) ?? 0
           return {
             date,
             roomType: type.name,
@@ -136,7 +142,14 @@ export function createAnalyticsService({ analyticsRepo }) {
 
     async roomNights() {
       const { roomNights } = await loadRoomNights()
-      return roomNights.map(({ revenueOre, ...night }) => ({ ...night, revenue: toKr(revenueOre) }))
+      // Fields listed instead of rest/spread, which is several times slower over ~1.3M rows
+      return roomNights.map(({ bookingId, date, roomType, countryCode, revenueOre }) => ({
+        bookingId,
+        date,
+        roomType,
+        countryCode,
+        revenue: toKr(revenueOre),
+      }))
     },
 
     async occupancy() {
@@ -164,18 +177,26 @@ export function createAnalyticsService({ analyticsRepo }) {
       const years = calendarYears({ periods: loaded.periods, bookings: loaded.bookings, barSales })
       const generatedAt = new Date().toISOString()
 
+      // Grouped once instead of filtering every row list again for each of the ~30 years
+      const byYear = (rows, dateField = 'date') => Map.groupBy(rows, (row) => yearOf(row[dateField]))
+      const nightsByYear = byYear(loaded.roomNights)
+      const occupancyByYear = byYear(occupancy)
+      // FT6: a booking counts in its check-in year
+      const bookingsByYear = byYear(bookingRows, 'checkIn')
+      const salesByYear = byYear(sales)
+      // FT12: the score is given at check-out, so it counts in the check-out year, not the check-in year (R8)
+      const checkOutsByYear = byYear(loaded.bookings, 'checkOut')
+
       return years.flatMap((year) => {
-        const inYear = (rows, dateField = 'date') => rows.filter((row) => yearOf(row[dateField]) === year)
-        const nightsInYear = inYear(loaded.roomNights)
-        const occupancyInYear = inYear(occupancy)
-        // FT6: a booking counts in its check-in year
-        const bookingsInYear = inYear(bookingRows, 'checkIn')
-        const salesInYear = inYear(sales)
+        const inYear = (groups) => groups.get(year) ?? []
+        const nightsInYear = inYear(nightsByYear)
+        const occupancyInYear = inYear(occupancyByYear)
+        const bookingsInYear = inYear(bookingsByYear)
+        const salesInYear = inYear(salesByYear)
         const roomRevenueOre = sum(nightsInYear.map((night) => night.revenueOre))
         const barRevenueOre = sum(salesInYear.map((sale) => sale.revenueOre))
-        // FT12: the score is given at check-out, so it counts in the check-out year, not the check-in year (R8).
         // null = not registered, so it is not a response
-        const scores = inYear(loaded.bookings, 'checkOut')
+        const scores = inYear(checkOutsByYear)
           .map((booking) => booking.satisfactionScore)
           .filter((score) => score != null)
         const row = (kpi, label, value, unit, dimension = null) => ({

@@ -2,7 +2,7 @@ import { AppError } from '../errors.js'
 import { toKr } from '../money.js'
 import { allocateRevenue, ratio, sum } from './analyticsService.js'
 import { nights } from './bookingService.js'
-import { eachNight, periodOn } from './pricing.js'
+import { periodOn, stayCalendar } from './pricing.js'
 
 // FR-015: three years including a leap day; longer day grouping gives more bars than the page can show
 const MAX_DAYS_GROUPED_BY_DAY = 1096
@@ -54,10 +54,11 @@ function roomRevenue({ bookings, periods, prices, from, to, groupBy }) {
     if (!seasonIds.has(date)) seasonIds.set(date, periodOn(periods, date)?.seasonId)
     return seasonIds.get(date)
   }
+  const calendar = stayCalendar(bookings)
   const byPeriod = new Map()
   let nightCount = 0
   for (const booking of bookings) {
-    const dates = [...eachNight(booking.checkIn, booking.checkOut)]
+    const dates = calendar.dates.slice(...calendar.span(booking))
     const shares = allocateRevenue(
       booking.totalPriceOre,
       dates.map((date) => priceOf.get(`${booking.roomTypeId}|${seasonIdOn(date)}`) ?? 0),

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { calculateStayPrice } from '../src/services/pricing.js'
+import { calculateStayPrice, stayCalendar } from '../src/services/pricing.js'
 
 const periods = [
   { seasonId: 1, seasonName: 'Lavsæson', startDate: '2026-01-01', endDate: '2026-05-31' },
@@ -46,4 +46,14 @@ test('FR-008: rejects a season without a room price', () => {
     () => calculateStayPrice({ checkIn: '2026-03-10', checkOut: '2026-03-12', periods, prices: new Map([[2, 80000]]) }),
     { code: 'PRICE_NOT_CONFIGURED' },
   )
+})
+
+test("006 FR-011: a stay's slice of the shared calendar is exactly its own nights, also across a year change", () => {
+  const stays = [
+    { checkIn: '2026-12-30', checkOut: '2027-01-02' },
+    { checkIn: '2026-12-28', checkOut: '2026-12-31' },
+  ]
+  const calendar = stayCalendar(stays)
+  assert.deepEqual(calendar.dates.slice(...calendar.span(stays[0])), ['2026-12-30', '2026-12-31', '2027-01-01'])
+  assert.deepEqual(calendar.dates.slice(...calendar.span(stays[1])), ['2026-12-28', '2026-12-29', '2026-12-30'])
 })
