@@ -1,13 +1,18 @@
 <!--
 Sync Impact Report
-- Version: 1.2.0 → 1.2.1 (PATCH: præcisering af princip III, intet princip fjernet eller tilføjet)
-- Ændret princip: III. Forretningslogik og nøgletal i logiklaget – præciserer, at aggregering,
-  filtrering, sortering og forholdet mellem to backend-beregnede summer er tilladt i
-  frontend/Tableau; formler, fordeling og regler er stadig forbudt.
+- Version: 1.2.1 → 2.0.0 (MAJOR: princip IV omdefineret, databasen skifter fra MySQL til PostgreSQL)
+- Ændret princip: IV. Containeriseret og reproducerbart miljø – "Databasen MUST være MySQL (T1)"
+  er erstattet af "Databasen MUST være PostgreSQL (T1, kravændring 2026-11-03)". Kilde: kunden,
+  specs/006-postgresql/spec.md.
+- Ændret sektion: Teknologiske rammer – Database er PostgreSQL, og datalaget bruger pg
+  (node-postgres) i stedet for mysql2.
 - Tilføjede sektioner: ingen. Fjernede sektioner: ingen.
 - Templates: ingen ændringer nødvendige (plan-template læser constitution ved kørsel).
-- Følgeændring: specs/002-bi-dashboard/plan.md Complexity Tracking kan henvise til III.
-- Udestående: ingen.
+- Følgeændringer: docs/krav/technical.md (T1, T4), docs/krav/README.md (Kravændringer),
+  docs/retningslinjer/database.md, kodekvalitet.md, tests.md, AGENTS.md, README.md.
+- Skiftet afprøver princip I og A5/A6: kun repositories, db.js, skema/startdata og
+  docker-compose.yml ændres. Services, routes, API-kontrakt og frontend er uændrede.
+- Udestående: ingen. Spec 001–005 er historiske og nævner stadig MySQL.
 -->
 # Kong Arthur Hotelsystem Constitution
 
@@ -58,7 +63,7 @@ tillader aggregering og filtrering til visning.
 ### IV. Containeriseret og reproducerbart miljø
 
 Alle dele (database, backend, frontend, Swagger UI) MUST køre i Docker-containere, og hele
-systemet MUST starte med én `docker compose up` (T2, T3, D7). Databasen MUST være MySQL (T1).
+systemet MUST starte med én `docker compose up` (T2, T3, D7). Databasen MUST være PostgreSQL (T1, kravændring 2026-11-03).
 
 Databasen MUST være klar (healthcheck), før backend forbinder (T4). Data MUST overleve
 genstart via et named volume (T5). Databasestruktur og startdata SHOULD oprettes
@@ -66,6 +71,8 @@ reproducerbart via migrations eller init-script (T6). Værelsestyper, priser og
 sæsonvariation MUST ligge i egne tabeller, ikke hardcodet (T7).
 
 **Rationale**: Alle i gruppen og censor skal kunne starte præcis samme system på få minutter.
+Skiftet fra MySQL til PostgreSQL (spec 006) afprøver A5/A6: kun repositories, `db.js`,
+skema/startdata og `docker-compose.yml` blev ændret.
 
 ### V. Testbar forretningslogik
 
@@ -91,10 +98,10 @@ alle beslutninger (D8). Kode, som ingen i gruppen kan forklare, MUST NOT merges.
 
 - **Orkestrering**: Docker Compose. Én `docker compose up` starter database, backend,
   frontend og Swagger UI.
-- **Database**: MySQL i egen container med named volume og healthcheck.
+- **Database**: PostgreSQL i egen container med named volume og healthcheck.
 - **Backend**: Node.js med Express i JavaScript (ES modules, ikke TypeScript), REST/JSON.
   Trelagsarkitekturen afspejles i mappestrukturen: præsentation (routes/controllers), logik
-  (services) og data (repositories med rå, parametriseret SQL via mysql2 — ingen ORM).
+  (services) og data (repositories med rå, parametriseret SQL via `pg` (node-postgres) — ingen ORM).
 - **Tests**: Node's indbyggede `node:test`. Kun backend testes.
 - **Sprog**: Kode, tabeller og kommentarer på engelsk. UI og dokumentation på dansk.
 - **Kontrakt**: OpenAPI-specifikation i repoet, serveret af Swagger UI i egen container.
@@ -141,4 +148,4 @@ versionsbump:
 Ved hvert converge-tjek og før aflevering MUST implementeringen kontrolleres mod
 principperne.
 
-**Version**: 1.2.1 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-30
+**Version**: 2.0.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-11-03

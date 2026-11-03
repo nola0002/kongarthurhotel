@@ -52,6 +52,7 @@ Oversigt over al dokumentation i repoet. Start med [README](../README.md) for at
 | [`converge.md`](../specs/001-backoffice-bookinger/converge.md) | Implementeret vs. mangler (KB-D4) |
 | [`checklists/requirements.md`](../specs/001-backoffice-bookinger/checklists/requirements.md) | Kvalitetstjek af spec'en |
 | [`002-bi-dashboard/spec.md`](../specs/002-bi-dashboard/spec.md) | Tableau-dashboardet: REST API-nøgletal og stjerneskema. Byggevejledning i [`tableau-guide.md`](tableau-guide.md) |
+| [`006-postgresql/spec.md`](../specs/006-postgresql/spec.md) | Kravændring T1: PostgreSQL i stedet for MySQL, plus indekser og hurtigere forespørgsler |
 
 ## Single source of truth
 

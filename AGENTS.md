@@ -6,7 +6,7 @@ mennesker. Reglerne er ikke forslag. Kode, der bryder dem, skal laves om, før d
 ## Projektet
 
 Hotel Kong Arthur: back office til receptionen (bookinger, barsalg) og et Tableau-dashboard
-til ledelsen. Stack: **Docker Compose · MySQL · Node.js + Express · React + Tailwind**.
+til ledelsen. Stack: **Docker Compose · PostgreSQL · Node.js + Express · React + Tailwind**.
 Tableau henter data via REST API'et.
 
 ## Læs før du skriver kode
@@ -27,7 +27,7 @@ Tableau henter data via REST API'et.
    stigen igennem i `kodekvalitet.md`, før du skriver noget nyt.
 2. **Genbrug frem for nyt.** Søg i kodebasen efter en eksisterende funktion, hjælper eller
    komponent, før du laver en ny. Dupleret logik er en fejl.
-3. **Genopfind ikke hjulet.** Brug Node, Express, React, HTML, CSS eller MySQL's indbyggede
+3. **Genopfind ikke hjulet.** Brug Node, Express, React, HTML, CSS eller PostgreSQL's indbyggede
    muligheder før egen kode og før nye afhængigheder.
 4. **Single source of truth.** Hver oplysning og regel findes ét sted. Se tabellen i
    `kodekvalitet.md`.

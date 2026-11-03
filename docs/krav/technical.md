@@ -6,11 +6,11 @@ står i [`plan.md`](../../specs/001-backoffice-bookinger/plan.md).
 
 | ID | Krav | Kilde | Prioritet | Opfyldes af |
 |---|---|---|---|---|
-| T1 | Databasen er MySQL | Opgaven (systemkrav) | Must | `mysql:8.4` i `docker-compose.yml` |
+| T1 | Databasen er PostgreSQL | Kunden, kravændring 2026-11-03 (var: MySQL, opgavens systemkrav) | Must | `postgres:18` i `docker-compose.yml` ([spec 006](../../specs/006-postgresql/spec.md)) |
 | T2 | Alle dele kører i Docker-containere | Opgaven (systemkrav) | Must | Fire services: `db`, `backend`, `frontend`, `swagger` |
 | T3 | Hele systemet starter med én `docker compose up` | Opgaven (Softwarearkitektur) | Must | [README § Kom i gang](../../README.md#kom-i-gang) |
-| T4 | Databasen er klar, før backend forbinder (healthcheck) | Tillægsspørgsmål 8 | Must | `healthcheck` på `db` og `depends_on: condition: service_healthy` |
-| T5 | Data overlever genstart af containere (named volume) | Tillægsspørgsmål 8 | Must | Volumen `db-data` |
+| T4 | Databasen er klar, før backend forbinder (healthcheck) | Tillægsspørgsmål 8 | Must | `healthcheck` med `pg_isready` på `db` og `depends_on: condition: service_healthy` |
+| T5 | Data overlever genstart af containere (named volume) | Tillægsspørgsmål 8 | Must | Volumen `pg-data` |
 | T6 | Databasestrukturen oprettes reproducerbart (migrations eller init-script) | Egen | Should | `db/01_schema.sql` og `db/02_seed.sql` via `docker-entrypoint-initdb.d` |
 | T6 (dublet-ID) | Automatiske tests af API og nøgletalsberegninger | Egen | Should | `backend/test/`, `npm test` |
 | T7 | Værelsestyper, priser og sæsonvariation som egne tabeller i databasen | Egen | Must | `room_types`, `seasons`, `season_periods`, `room_prices` i `db/01_schema.sql`. Indholdet er opgavens 8 værelsestyper, priser og sæsoner inkl. jul (spec 004 FR-001–FR-004) |

@@ -1,7 +1,7 @@
 # Hotel Kong Arthur
 
 Back office til receptionen (bookinger og barsalg) og data til ledelsens Tableau-dashboard.
-Stack: Docker Compose, MySQL 8.4, Node.js 24 + Express 5 og React 19 + Tailwind 4.
+Stack: Docker Compose, PostgreSQL 18, Node.js 24 + Express 5 og React 19 + Tailwind 4.
 
 Back office (feature [001](specs/001-backoffice-bookinger/spec.md)), receptionsoverblik med
 belægningsplan og kundetilfredshed ([003](specs/003-receptionsoverblik/spec.md)), opgavens data
@@ -25,14 +25,14 @@ flowchart LR
       Validator[OpenAPI-validator] --> Routes[routes] --> Services[services] --> Repositories[repositories]
     end
     Spec[/"backend/openapi.yaml"/]
-    DB[("db (MySQL 8.4)<br/>volume db-data, healthcheck")]
+    DB[("db (PostgreSQL 18)<br/>volume pg-data, healthcheck")]
   end
 
   Frontend -- "/api (proxy)" --> Validator
   Frontend -- "/docs (proxy)" --> Swagger
   Spec -. "læses af" .-> Validator
   Spec -. "vises af" .-> Swagger
-  Repositories -- "mysql2" --> DB
+  Repositories -- "pg" --> DB
 ```
 
 - **Tre lag** i backend: routes (HTTP) → services (forretningsregler) → repositories (SQL).
@@ -42,11 +42,12 @@ flowchart LR
   requests, og af Swagger UI. Der findes ingen anden beskrivelse af API'et.
 - **Én origin**: Vite-serveren i `frontend` sender `/api` videre til backend og `/docs` til
   Swagger UI. Browseren ser kun `localhost:5173`, så session-cookien virker uden CORS.
-- **Databasen** bruger MySQL 8.4's standard `utf8mb4_0900_ai_ci`, så søgning på gæstenavn
-  hverken skelner mellem store og små bogstaver eller accenter (FR-002). Den er kun tilgængelig inde i Compose-netværket. Frontend, Swagger og eksterne
+- **Databasen** er PostgreSQL 18 (T1, kravændring 2026-11-03, [spec 006](specs/006-postgresql/spec.md)).
+  Søgning på gæstenavn skelner hverken mellem store og små bogstaver eller accenter og bruger
+  et `pg_trgm`-indeks (FR-002). Den er kun tilgængelig inde i Compose-netværket. Frontend, Swagger og eksterne
   systemer går altid gennem API'et.
 - `db` har en healthcheck, og `backend` starter først, når den er grøn. Data ligger i det
-  navngivne volume `db-data` og overlever genstart.
+  navngivne volume `pg-data` og overlever genstart.
 
 Begrundelserne står i [`research.md`](specs/001-backoffice-bookinger/research.md) og
 [`plan.md`](specs/001-backoffice-bookinger/plan.md).
@@ -99,8 +100,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Første start tager et par minutter, fordi MySQL indlæser testdata. Systemet er klar, når
+Første start tager et par minutter, fordi PostgreSQL indlæser testdata. Systemet er klar, når
 backend logger `API listening on :3000`.
+
+**Fra før 2026-11-03 (MySQL)**: Variablerne i `.env` hedder nu `POSTGRES_DB`, `POSTGRES_USER` og
+`POSTGRES_PASSWORD`. Kopiér `.env.example` til `.env` igen, eller omdøb `MYSQL_*` og slet
+`MYSQL_ROOT_PASSWORD`. Kør derefter `docker compose up --build`. PostgreSQL bruger et nyt volume,
+`pg-data`, så det gamle MySQL-volume bliver ikke rørt. Det kan slettes med
+`docker volume rm kongarthurhotel_db-data`.
 
 | Hvad | URL |
 |---|---|
@@ -206,7 +213,7 @@ Skærmene er beskrevet i [`docs/design/skaerme.md`](docs/design/skaerme.md) og k
 priser bruger falske repositories og kræver ingen database. API-testene starter appen på en
 tilfældig port og kører mod en separat database, `kongarthur_test`, som bygges forfra ved hver
 kørsel. De rører aldrig udviklingsdata. Uden for containeren (`cd backend && npm ci && npm
-test`) springes API-testene over, fordi de kræver MySQL.
+test`) springes API-testene over, fordi de kræver PostgreSQL.
 
 **Testdata**: `db/02_seed.sql` genereres af
 [`backend/scripts/generate-seed.js`](backend/scripts/generate-seed.js) og må ikke redigeres i
@@ -238,9 +245,9 @@ så alle får de samme data, og det stopper med en fejl, hvis data afviger fra o
 
 Priserne på de genererede bookinger beregnes med samme `calculateStayPrice` som backend.
 `docker compose up` fra et tomt volume tager ca. 20 sekunder, når billederne er bygget
-(indlæsningen af seed-filen på ca. 50 MB tager ca. 6 sekunder).
+(indlæsningen af seed-filen på ca. 50 MB tager ca. 7 sekunder).
 
-**Nulstilling**: Filerne i `db/` køres af MySQL-containeren (`docker-entrypoint-initdb.d`)
+**Nulstilling**: Filerne i `db/` køres af PostgreSQL-containeren (`docker-entrypoint-initdb.d`)
 **kun på et tomt volume**. Efter en ændring af skema eller seed, også når du har hentet en ny
 seed med `git pull`, skal du derfor køre `docker compose down -v && docker compose up --build`.
 `-v` sletter volumet og dermed alle data, også bookinger, du selv har oprettet.
@@ -250,12 +257,10 @@ seed med `git pull`, skal du derfor køre `docker compose down -v && docker comp
 | Symptom | Årsag og løsning |
 |---|---|
 | `Cannot connect to the Docker daemon` eller `error during connect` | Docker Desktop kører ikke. Start det, og prøv igen |
-| `port is already allocated` / `address already in use` | Et andet program bruger port 3000 eller 5173. Stop det (`lsof -i :3000` på macOS/Linux). MySQL-porten er ikke eksponeret, så en lokal MySQL er ikke et problem |
+| `port is already allocated` / `address already in use` | Et andet program bruger port 3000 eller 5173. Stop det (`lsof -i :3000` på macOS/Linux). Databaseporten er ikke eksponeret, så en lokal PostgreSQL er ikke et problem |
 | `Cannot find module` / `Failed to resolve import` efter `git pull` | Containerens `node_modules` ligger i et anonymt volume og er forældet. Kør `docker compose up --build -V` |
 | Ændringer i `db/*.sql` slår ikke igennem, eller login virker ikke efter ændret `SEED_PASSWORD` | Init-scripts kører kun på et tomt volume. Kør `docker compose down -v && docker compose up --build` |
-| API-testene fejler med `Access denied … kongarthur_test` | Volumet er ældre end `db/00_test-db.sh`. Nulstil med `docker compose down -v` |
-| `db` stopper med `/bin/bash^M: bad interpreter` (Windows) | `00_test-db.sh` er tjekket ud med CRLF. `db/.gitattributes` tvinger LF, men en ældre checkout skal fornys: `rm db/00_test-db.sh && git checkout -- db/00_test-db.sh`, og derefter `docker compose down -v && docker compose up --build` |
-| Backend starter ikke og venter på `db` | MySQL indlæser stadig seed. Healthchecken giver op til ca. 3 minutter. Se `docker compose logs db` |
+| Backend starter ikke og venter på `db` | PostgreSQL indlæser stadig seed. Healthchecken giver op til ca. 3 minutter. Se `docker compose logs db` |
 | Back office viser en teknisk engelsk fejl | Backend genstarter (fx efter en kodeændring), og Vite-proxyen svarer med HTML. Vent et øjeblik, og genindlæs |
 
 ## HTTPS

@@ -46,6 +46,14 @@ Hvad der faktisk er bygget, står i
 | D11 | Co-authored git commits | Softwarearkitektur | Must | `Co-authored-by:`-trailer, jf. `CONTRIBUTE.md` |
 | D12 | Commit til `main` ved hver større ændring, så vi kan følge og gå tilbage | Softwarearkitektur | Must | `CONTRIBUTE.md` § Commits |
 
+## Kravændringer
+
+Kravboardet ovenfor er det oprindelige. Senere ændringer logges her og i den berørte kravfil.
+
+| Dato | Krav | Ændring | Kilde | Spec |
+|---|---|---|---|---|
+| 2026-11-03 | T1 | MySQL → PostgreSQL | Kunden | [`specs/006-postgresql/spec.md`](../../specs/006-postgresql/spec.md) |
+
 ## Kendte uklarheder på boardet
 
 - `A5` og `T6` er brugt to gange hver. Vi skelner ved at nævne kravets indhold.

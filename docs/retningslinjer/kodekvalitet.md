@@ -20,7 +20,7 @@ løsning. Den mindste ændring det forkerte sted er bare en ny fejl.
 4. **Kan platformen det?**
    - HTML: `<input type="date">`, `required`, `min`, `<dialog>`
    - CSS/Tailwind i stedet for JavaScript til layout og visning
-   - MySQL: `CHECK`, `UNIQUE`, `FOREIGN KEY`, `SUM`, `COUNT`
+   - PostgreSQL: `CHECK`, `UNIQUE`, `FOREIGN KEY`, `SUM`, `COUNT`
 5. **Løser en installeret afhængighed det?** Så brug den.
 6. **Kan det skrives på én linje?** Så skriv det på én linje.
 7. **Først nu:** skriv den mindste kode, der virker.
@@ -52,7 +52,7 @@ vises ved at spørge API'et, ikke ved at regne den ud i React.
 ```
 routes/        HTTP: parse input, kald service, oversæt resultat til status/JSON
 services/      Forretningsregler og nøgletal. Kender ikke req/res og ikke SQL.
-repositories/  SQL med mysql2. Returnerer rene objekter. Ingen forretningsregler.
+repositories/  SQL med pg. Returnerer rene objekter. Ingen forretningsregler.
 ```
 
 - Et lag kalder **kun** laget direkte under sig.
@@ -63,7 +63,7 @@ repositories/  SQL med mysql2. Returnerer rene objekter. Ingen forretningsregler
 - `try/catch` i hver route er ikke nødvendigt. Brug den fælles fejlhåndtering.
 - **SQL:** Altid parametriserede queries (`?`-pladsholdere). Byg aldrig SQL med
   string-sammensætning.
-- **Penge:** `DECIMAL` i databasen. Beløb regnes i øre (heltal) eller med `DECIMAL`-sikker
+- **Penge:** `NUMERIC` i databasen. Beløb regnes i øre (heltal) eller med `NUMERIC`-sikker
   aritmetik, aldrig med floats som `0.1 + 0.2`.
 - **Datoer:** `DATE` i databasen og ISO-strenge (`2026-03-10`) i API'et.
 - **Hemmeligheder** (DB-adgangskode, API-nøgle til bookingsystemet, receptionistens

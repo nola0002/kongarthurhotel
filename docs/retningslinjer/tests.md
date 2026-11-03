@@ -23,7 +23,7 @@ Prioriteret rækkefølge:
 3. **API-kontrakt** for de vigtigste endpoints: korrekt statuskode, fejlformat og at login
    kræves.
 
-**Ikke** tests af: Express selv, mysql2 selv, trivielle gettere, React-komponenter eller
+**Ikke** tests af: Express selv, pg selv, trivielle gettere, React-komponenter eller
 kode uden logik.
 
 ## 3. Hvordan en god test ser ud
@@ -51,7 +51,7 @@ kode uden logik.
 - Services testes med en **simpel falsk repository**, dvs. et almindeligt objekt med de
   samme funktioner, der returnerer faste data. Ingen mock-biblioteker.
 - Mock ikke det, du tester. Mock kun grænsen til databasen.
-- API- og integrationstests mod rigtig MySQL kører mod en separat testdatabase, der
+- API- og integrationstests mod rigtig PostgreSQL kører mod en separat testdatabase, der
   nulstilles før hver kørsel. De må aldrig køre mod udviklingsdata.
 
 ## 5. Hvornår
