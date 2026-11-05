@@ -13,7 +13,9 @@ CREATE FUNCTION search_key(value TEXT) RETURNS TEXT
 
 CREATE TABLE countries (
   code CHAR(2) PRIMARY KEY,
-  name VARCHAR(100) NOT NULL
+  name VARCHAR(100) NOT NULL,
+  -- Tableau also reads two-letter codes as FIPS 10 (CN = Comoros, CH = China); alpha-3 has no such clash
+  iso3 CHAR(3) NOT NULL UNIQUE
 );
 
 CREATE TABLE room_types (

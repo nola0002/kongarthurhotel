@@ -136,7 +136,11 @@ export function createAnalyticsService({ analyticsRepo }) {
     },
 
     async countries() {
-      return (await analyticsRepo.listCountries()).map(({ code, name }) => ({ countryCode: code, country: name }))
+      return (await analyticsRepo.listCountries()).map(({ code, name, iso3 }) => ({
+        countryCode: code,
+        iso3,
+        country: name,
+      }))
     },
 
     async roomNights() {

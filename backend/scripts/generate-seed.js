@@ -100,12 +100,25 @@ const EUROPE = new Set([
   'DK', 'DE', 'SE', 'NO', 'GB', 'NL', 'IT', 'FR', 'ES', 'CH', 'PL', 'FI', 'AT', 'BE', 'IE', 'IS', 'PT', 'GR', 'CZ', 'EE',
   'LT', 'UA', 'RU',
 ])
+// ISO 3166-1 alpha-3 for Tableau's map; Intl only knows alpha-2
+// prettier-ignore
+const iso3ByCode = {
+  DK: 'DNK', DE: 'DEU', SE: 'SWE', NO: 'NOR', GB: 'GBR', US: 'USA', NL: 'NLD', IT: 'ITA', FR: 'FRA', ES: 'ESP',
+  CH: 'CHE', PL: 'POL', FI: 'FIN', AT: 'AUT', BE: 'BEL', IE: 'IRL', IS: 'ISL', PT: 'PRT', GR: 'GRC', CZ: 'CZE',
+  EE: 'EST', LT: 'LTU', UA: 'UKR', RU: 'RUS', TR: 'TUR', IL: 'ISR', AE: 'ARE', CN: 'CHN', JP: 'JPN', KR: 'KOR',
+  IN: 'IND', SG: 'SGP', TH: 'THA', VN: 'VNM', PK: 'PAK', AU: 'AUS', NZ: 'NZL', CA: 'CAN', MX: 'MEX', BR: 'BRA',
+  AR: 'ARG', ZA: 'ZAF', EG: 'EGY', NG: 'NGA',
+}
 const regionNames = new Intl.DisplayNames('da', { type: 'region' })
-const countries = Object.keys(countryWeights).map((code) => ({ code, name: regionNames.of(code) }))
+const countries = Object.keys(countryWeights).map((code) => ({
+  code,
+  name: regionNames.of(code),
+  iso3: iso3ByCode[code],
+}))
 insert(
   'countries',
-  ['code', 'name'],
-  countries.map((c) => [c.code, c.name]),
+  ['code', 'name', 'iso3'],
+  countries.map((c) => [c.code, c.name, c.iso3]),
 )
 
 // --- Room types and rooms: the assignment's 8 types, 214 rooms, 428 guests (004 FR-001, FR-002, research R4) ---

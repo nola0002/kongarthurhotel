@@ -1598,11 +1598,16 @@ components:
 
     AnalyticsCountry:
       type: object
-      required: [countryCode, country]
+      required: [countryCode, iso3, country]
       properties:
         countryCode: { type: string, minLength: 2, maxLength: 2, description: ISO 3166-1 alpha-2 }
+        iso3:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 3166-1 alpha-3 for Tableau's map. Two-letter codes can be read as FIPS 10 (CN = Comoros)
         country: { type: string, description: Danish name }
-      example: { countryCode: DK, country: Danmark }
+      example: { countryCode: DK, iso3: DNK, country: Danmark }
 
     Error:
       type: object

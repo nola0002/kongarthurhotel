@@ -32,7 +32,7 @@ export async function setupTestDb() {
     // Two Dobbeltværelse rooms at 500 kr/night all year round, so expected prices are easy to compute.
     // The Suite has no rooms, so the analytics room-type dimension must still list it with 0 (FR-017)
     await conn.query(
-      `INSERT INTO countries (code, name) VALUES ('DK', 'Danmark'), ('SE', 'Sverige');
+      `INSERT INTO countries (code, name, iso3) VALUES ('DK', 'Danmark', 'DNK'), ('SE', 'Sverige', 'SWE');
        INSERT INTO room_types (id, name, capacity) VALUES (1, 'Dobbeltværelse', 2), (2, 'Suite', 4);
        INSERT INTO rooms (room_number, room_type_id) VALUES ('101', 1), ('102', 1);
        INSERT INTO seasons (id, name) VALUES (1, 'Helår');

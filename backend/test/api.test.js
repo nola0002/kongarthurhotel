@@ -516,8 +516,8 @@ describe(
     test('FT16: the country dimension lists every country by name, also those without bookings', async () => {
       const res = await authed('/analytics/countries')
       assert.deepEqual(await res.json(), [
-        { countryCode: 'DK', country: 'Danmark' },
-        { countryCode: 'SE', country: 'Sverige' },
+        { countryCode: 'DK', iso3: 'DNK', country: 'Danmark' },
+        { countryCode: 'SE', iso3: 'SWE', country: 'Sverige' },
       ])
     })
   },

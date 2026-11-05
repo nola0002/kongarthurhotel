@@ -2,7 +2,10 @@ import { pool, query } from '../db.js'
 import { toOre } from '../money.js'
 import { getPeriods, getPrices } from './pricingRepository.js'
 
-export { listCountries } from './referenceRepository.js'
+export async function listCountries() {
+  const { rows } = await query('SELECT code, name, iso3 FROM countries ORDER BY name')
+  return rows
+}
 
 export async function listBookings() {
   const { rows } = await query(
