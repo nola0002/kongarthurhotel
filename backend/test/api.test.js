@@ -467,6 +467,22 @@ describe(
       assert.ok(Array.isArray(await res.json()))
     })
 
+    test('006 FR-012: offset and limit split a fact table into pages without gaps or overlap', async () => {
+      await create(stay('2031-05-10', '2031-05-12'))
+      await create(stay('2031-05-11', '2031-05-13'))
+      const all = await (await authed('/analytics/room-nights')).json()
+      const first = await (await authed('/analytics/room-nights?limit=1')).json()
+      const rest = await (await authed('/analytics/room-nights?offset=1')).json()
+      assert.equal(first.length, 1)
+      assert.deepEqual([...first, ...rest], all)
+    })
+
+    test('006 FR-013: analytics are gzip-compressed for a client that accepts it', async () => {
+      const res = await authed('/analytics/countries', { headers: { 'Accept-Encoding': 'gzip' } })
+      assert.equal(res.headers.get('content-encoding'), 'gzip')
+      assert.ok(Array.isArray(await res.json()))
+    })
+
     const DIMENSIONS = ['calendar', 'room-types', 'countries']
 
     test('FT16: /analytics lists the five facts and the three dimensions', async () => {

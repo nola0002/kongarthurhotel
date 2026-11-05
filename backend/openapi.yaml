@@ -31,6 +31,9 @@ info:
     The BI key is rejected everywhere else, and every analytics endpoint is GET only, so the
     dashboard cannot change data (FR-014/FT17). Each endpoint returns a flat JSON array with
     every year; Tableau filters and aggregates, while all KPI formulas live in the backend (A4/FR-011).
+    The three large facts (`room-nights`, `bookings`, `bar-sales`) can be read in pages with
+    `offset` and `limit`, and every table is sent gzip-compressed when the client sends
+    `Accept-Encoding: gzip` (006 FR-012, FR-013).
 
     ## Errors
     Every error has the same shape, and `message` is Danish and meant to be shown as-is:
@@ -75,8 +78,8 @@ tags:
   - name: Analytics
     description: |
       Read-only data for the Tableau dashboard (feature 002). Every endpoint returns a flat array
-      covering all years, with no query parameters. The tables form a star schema in one Tableau data
-      source: the dimensions `calendar`, `room-types` and `countries` hold the descriptive fields
+      covering all years. Only the large facts take query parameters: `offset` and `limit` for paging.
+      The tables form a star schema in one Tableau data source: the dimensions `calendar`, `room-types` and `countries` hold the descriptive fields
       (year, month, season, country name), and the facts `room-nights`, `occupancy`, `bookings`,
       `bar-sales` and `kpis` hold only keys to them and their own measures (FR-012, FR-017).
       `year` and `month` are integers; money is DKK; `percent` values are fractions 0–1.
@@ -737,6 +740,9 @@ paths:
         night, so a booking's rows always sum to its `totalPrice`. If every weight is 0 the total is
         split evenly. Rankings (FT9) are `SUM(revenue)` sorted in Tableau.
       security: [{ session: [] }, { biKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Room-nights ordered by check-in
@@ -775,6 +781,9 @@ paths:
         `checkIn` relates the booking to the calendar, so it counts in the year and month of check-in.
         `nights` is derived from the dates. `revenue` is `totalPrice`.
       security: [{ session: [] }, { biKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Bookings ordered by check-in
@@ -791,6 +800,9 @@ paths:
       summary: One row per bar sale (FT13, FT14)
       description: '`revenue` = quantity × the unit price frozen at the time of sale (FR-010).'
       security: [{ session: [] }, { biKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Sales ordered by time of sale
@@ -894,6 +906,18 @@ components:
       type: http
       scheme: bearer
       description: 'BI_API_KEY for Tableau (FR-014/FT17); only valid for GET /analytics/*'
+
+  parameters:
+    Offset:
+      name: offset
+      in: query
+      description: 'Rows to skip, for paging (006 FR-012). Rows have a fixed order, but a booking or sale made while Tableau pages can shift a row across a page boundary'
+      schema: { type: integer, minimum: 0, default: 0 }
+    Limit:
+      name: limit
+      in: query
+      description: 'At most this many rows. Without it, every row from `offset` on. A page shorter than `limit` is the last'
+      schema: { type: integer, minimum: 1 }
 
   schemas:
     BookingInput:
@@ -1436,9 +1460,8 @@ components:
 
     RoomNight:
       type: object
-      required: [bookingId, date, roomType, countryCode, revenue]
+      required: [date, roomType, countryCode, revenue]
       properties:
-        bookingId: { type: integer }
         date:
           {
             type: string,
@@ -1448,7 +1471,7 @@ components:
         roomType: { type: string, description: Key to AnalyticsRoomType.roomType }
         countryCode: { type: string, description: Key to AnalyticsCountry.countryCode }
         revenue: { type: number, description: "The night's share of the booking's totalPrice (FR-015)" }
-      example: { bookingId: 10384, date: '2027-01-10', roomType: Dobbeltværelse, countryCode: DK, revenue: 1000 }
+      example: { date: '2027-01-10', roomType: Dobbeltværelse, countryCode: DK, revenue: 1000 }
 
     OccupancyDay:
       type: object

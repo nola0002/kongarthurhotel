@@ -54,7 +54,6 @@ export function createAnalyticsService({ analyticsRepo }) {
         seasons.map((period) => prices?.get(period?.seasonId) ?? 0),
       )
       return dates.map((date, i) => ({
-        bookingId: booking.id,
         date,
         roomType: booking.roomType,
         countryCode: booking.countryCode,
@@ -143,8 +142,7 @@ export function createAnalyticsService({ analyticsRepo }) {
     async roomNights() {
       const { roomNights } = await loadRoomNights()
       // Fields listed instead of rest/spread, which is several times slower over ~1.3M rows
-      return roomNights.map(({ bookingId, date, roomType, countryCode, revenueOre }) => ({
-        bookingId,
+      return roomNights.map(({ date, roomType, countryCode, revenueOre }) => ({
         date,
         roomType,
         countryCode,

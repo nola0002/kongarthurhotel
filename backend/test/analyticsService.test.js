@@ -333,7 +333,7 @@ test('FT16: facts only have keys to the dimensions and their own measures', asyn
     barSales: [sale(1, '2026-03-10', 'Kaffe', 1, 5000)],
   })
   const fields = async (rows) => Object.keys((await rows)[0]).sort()
-  assert.deepEqual(await fields(analytics.roomNights()), ['bookingId', 'countryCode', 'date', 'revenue', 'roomType'])
+  assert.deepEqual(await fields(analytics.roomNights()), ['countryCode', 'date', 'revenue', 'roomType'])
   assert.deepEqual(await fields(analytics.occupancy()), [
     'availableRoomNights',
     'date',
