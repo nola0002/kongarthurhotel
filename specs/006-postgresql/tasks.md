@@ -59,6 +59,21 @@ Svartider på startdatasættet (ms, MySQL → PostgreSQL, efter én opvarmning):
 - [X] T018 [US5] Constitution 2.0.0: princip IV og teknologiske rammer siger PostgreSQL
 - [X] T019 [US5] `AGENTS.md`, `docs/retningslinjer/{database,kodekvalitet,tests}.md`, `README.md` (opstart for dem med gammel `.env` og MySQL-volume), `docs/README.md`
 
+## Phase 6: Kravændring 2026-11-05 – Tableau kan læse de store tabeller
+
+- [X] T020 `offset`/`limit` på `room-nights`, `bookings` og `bar-sales` i `routes/analytics.js` og `openapi.yaml` (FR-012, R14)
+- [X] T021 gzip af alle `/analytics`-svar med `node:zlib` (FR-013, R15)
+- [X] T022 `bookingId` fjernet fra værelsesnætterne i `analyticsService.js`, `openapi.yaml` og 002 data-model (FR-014, R16)
+- [X] T023 API-tests: siderne giver tilsammen hele tabellen, og svaret er gzip, når klienten accepterer det. 164 af 164 tests grønne
+- [X] T024 `docs/tableau-guide.md`: paginering i connectoren, felttabellen og fejlfinding
+
+| `/analytics/room-nights` | Størrelse | Tid |
+|---|---|---|
+| Før | 139 MB | 1,9 s |
+| Uden `bookingId` | 115 MB | 1,5 s |
+| Med gzip | 4,2 MB | 1,1 s |
+| Én side med `limit=250000` (gzip) | | 0,65 s |
+
 ## Bevidst ikke lavet
 
 - **To-bogstavssøgning** (113 ms, under SC-005's 200 ms): et trigramindeks kræver mindst tre
@@ -67,4 +82,4 @@ Svartider på startdatasættet (ms, MySQL → PostgreSQL, efter én opvarmning):
   En `MIN/MAX`-forespørgsel ville give ca. 50 ms, men kræver en ny repository-funktion og
   ændringer i testenes falske repository. Laves, hvis kalenderen bliver et problem.
 - **`/analytics/room-nights`**: resten af tiden er at bygge 138 MB JSON. Størrelsen er
-  kontrakten med Tableau.
+  kontrakten med Tableau. *Ændret 2026-11-05: se Phase 6.*

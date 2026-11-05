@@ -115,6 +115,14 @@ All Extracts (afsnit 7).
    | Server-URL | `http://localhost:3000/api/analytics/` |
    | Autentificering | Bearer token (access token) med værdien af `BI_API_KEY` |
    | JSONPath to records | `$[*]`. Svaret er en JSON-array på øverste niveau **(tjek i jeres Tableau-version)**: virker `$[*]` ikke, så prøv `$` |
+   | Paginering | Offset/limit med parametrene `offset` og `limit` og sidestørrelse `250000` **(tjek i jeres Tableau-version)**: Exchange-siden nævner kun "offset/limit" |
+
+   Paginering virker på `room-nights`, `bookings` og `bar-sales`. Uden den skal Tableau læse
+   værelsesnætterne (1,3 mio. rækker, 115 MB) i ét svar og kan løbe tør for hukommelse. En side
+   er sidste side, når den har færre rækker end `limit`. De andre tabeller afviser `offset` og
+   `limit` med `400`. Kan connectoren kun paginere alle tabeller eller ingen, så tilføj de tre
+   store tabeller som egne endpoints med paginering og de fem andre uden. Svarene sendes
+   gzip-komprimeret, hvis connectoren beder om det.
 
    Connectoren tester server-URL'en ved forbindelsen. Backend svarer med listen over de otte
    tabeller.
@@ -195,8 +203,8 @@ være Many / Many. Forkerte indstillinger kan tabe eller dublere data
 Hvor indstillingerne ligger i panelet, står ikke i Tableaus dokumentation **(tjek i jeres
 Tableau-version)**. I skal ikke ændre dem, kun se, at de står på standarden.
 
-**Hvorfor relateres fakta aldrig til hinanden?** Værelsesnætter har `bookingId` og kunne kobles
-til Bookinger, men det ville give en cyklus (Værelsesnætter → Bookinger → Kalender ←
+**Hvorfor relateres fakta aldrig til hinanden?** Værelsesnætter kunne kobles til Bookinger, men
+det ville give en cyklus (Værelsesnætter → Bookinger → Kalender ←
 Værelsesnætter). Tableau tillader ikke cyklusser, og en relation mellem to basistabeller er ikke
 tilladt i multi-fact-modellen (research R8). Fakta deler i stedet dimensionerne. Så betyder et
 filter på `Kalender.year` det samme i alle tabeller.
@@ -215,7 +223,6 @@ at gruppere eller filtrere, og Measure, at feltet summeres.
 | Værelsestyper | `capacity`, `rooms` | Number (whole) | Bruges ikke i arkene |
 | Lande | `countryCode` | String | Dimension, geografisk rolle **Country/Region** |
 | Lande | `country` | String | Dimension |
-| Værelsesnætter | `bookingId` | Number (whole) | Dimension (et id summeres ikke) |
 | Værelsesnætter | `revenue` | Number (decimal) | Measure |
 | Belægning | `availableRoomNights`, `soldRoomNights` | Number (whole) | Measure |
 | Belægning | `occupancyRate` | Number (decimal) | Bruges **ikke** (afsnit 0) |
@@ -487,7 +494,7 @@ eller et filter, aldrig en manglende formel i Tableau (afsnit 9).
 | Et land ændrer belægning eller barsalg | Filteret eller Use as Filter-handlingen rammer for mange ark. Ret dem efter afsnit 6.2 og 6.3 |
 | Ingen New Base Table, Tableau vil ikke relatere to fakta til samme dimension, eller extractet fejler med "No such table" | Tableau er ældre end 2024.2.1. Multi-fact-modellen kom i 2024.2, og "No such table" ved extract er rettet i 2024.2.1. Tjek Help → About Tableau, og opgradér (research R9) |
 | Landene står som "Unknown" på kortet | `countryCode` har ikke rollen Country/Region, eller den er sat på `country` (danske navne genkendes ikke altid). Sæt rollen på `countryCode` (afsnit 4) |
-| Refresh All Extracts tager lang tid eller timer ud | Barsalg (132.698 rækker), værelsesnætter (117.806) og bookinger (21.570) hentes i sin helhed ved hver opdatering. Mål tiden med `curl -s -o /dev/null -w '%{time_total}\n' -H "Authorization: Bearer $BI_API_KEY" http://localhost:3000/api/analytics/bar-sales`. Hæv connectorens timeout i forbindelsesindstillingerne **(tjek i jeres Tableau-version)**. Brug ikke extract-filtre: de virker pr. tabel og ikke på tværs i multi-fact (research R9) |
+| Refresh All Extracts tager lang tid, timer ud eller får Tableau til at lukke | Værelsesnætter (1,3 mio. rækker), barsalg (408.000) og bookinger (234.000) hentes i sin helhed ved hver opdatering. Slå paginering til (afsnit 3.1). Mål tiden med `curl -s -o /dev/null -w '%{time_total}\n' -H "Authorization: Bearer $BI_API_KEY" http://localhost:3000/api/analytics/bar-sales`. Hæv connectorens timeout i forbindelsesindstillingerne **(tjek i jeres Tableau-version)**. Brug ikke extract-filtre: de virker pr. tabel og ikke på tværs i multi-fact (research R9) |
 | Opdateringen fejler, fordi API'et er nede | Forventet. Dashboardet beholder de seneste data og det gamle "Data opdateret" (research R7). Start backend, og opdatér igen |
 
 ## 10. Sådan forklarer I modellen ved fremlæggelsen
