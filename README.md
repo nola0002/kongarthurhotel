@@ -121,7 +121,7 @@ committes.
 ### Log ind
 
 Brugernavn og adgangskode er `SEED_USERNAME` / `SEED_PASSWORD` fra `.env` (standard
-`reception` / `skift-mig`). Kontoen ligger ikke i seed-filen. Backend opretter den ved start,
+`Hotel Kong Arthur` / `skift-mig`). Kontoen ligger ikke i seed-filen. Backend opretter den ved start,
 hvis tabellen `users` er tom (`ensureSeedUser()` i
 [`authService.js`](backend/src/services/authService.js)). Ændrer du `SEED_PASSWORD` senere,
 skal data nulstilles, før den nye adgangskode virker.
