@@ -89,6 +89,7 @@ sæsonperioderne, bookingernes `check_in`/`check_out` og barsalgenes datoer (res
 | Felt | Nøgle | Afledt af |
 |---|---|---|
 | `countryCode` | **ja** (ISO 3166-1 alpha-2, primærnøgle) | `countries.code` |
+| `iso3` | – | `countries.iso3` (ISO 3166-1 alpha-3). Kortets geografiske rolle, da Tableau også læser tobogstavskoder som FIPS 10 (`CN` = Comorerne) |
 | `country` | – | `countries.name` (dansk) |
 
 ### Fakta og deres nøgler

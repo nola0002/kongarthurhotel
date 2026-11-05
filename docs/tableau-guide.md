@@ -221,7 +221,8 @@ at gruppere eller filtrere, og Measure, at feltet summeres.
 | Kalender | `season` | String | Dimension |
 | Værelsestyper | `roomType` | String | Dimension |
 | Værelsestyper | `capacity`, `rooms` | Number (whole) | Bruges ikke i arkene |
-| Lande | `countryCode` | String | Dimension, geografisk rolle **Country/Region** |
+| Lande | `countryCode` | String | Dimension (nøgle til fakta) |
+| Lande | `iso3` | String | Dimension, geografisk rolle **Country/Region** |
 | Lande | `country` | String | Dimension |
 | Værelsesnætter | `revenue` | Number (decimal) | Measure |
 | Belægning | `availableRoomNights`, `soldRoomNights` | Number (whole) | Measure |
@@ -241,8 +242,9 @@ at gruppere eller filtrere, og Measure, at feltet summeres.
 
 - **Discrete/Measure/Dimension:** Højreklik på feltet i Data-panelet, og vælg Convert to
   Discrete eller Convert to Dimension.
-- **Geografisk rolle:** Klik på type-ikonet ved `countryCode`, og vælg Geographic Role →
-  Country/Region. Tableau genkender ISO 3166-1 alpha-2-koder (`DK`, `DE`)
+- **Geografisk rolle:** Klik på type-ikonet ved `iso3`, og vælg Geographic Role →
+  Country/Region. Brug ikke `countryCode`: Tableau læser også tobogstavskoder som FIPS 10, hvor
+  `CN` er Comorerne og `CH` er Kina. Trebogstavskoder (`CHN`, `CHE`) kan kun læses som ISO 3166-1 alpha-3
   ([Assign geographic roles](https://help.tableau.com/current/pro/desktop/en-us/maps_geographicroles.htm)).
 - **Standardformat:** Sæt talformatet én gang pr. felt. Højreklik på feltet → Default Properties
   → Number Format. Så arver alle ark det:
@@ -346,7 +348,7 @@ Det er en indstilling mere at forklare for den samme rangering.
 
 Formål: hvor gæsterne kommer fra.
 
-1. Dobbeltklik på `Lande.countryCode` (geografisk rolle Country/Region). Tableau laver et kort.
+1. Dobbeltklik på `Lande.iso3` (geografisk rolle Country/Region). Tableau laver et kort.
 2. Marks: Map (udfyldt kort).
 3. Color: `Bookinger.guestCount` (SUM).
 4. Tooltip: `Lande.country`, SUM(`guestCount`) og antal bookinger. Træk `Bookinger.bookingId`
@@ -493,7 +495,7 @@ eller et filter, aldrig en manglende formel i Tableau (afsnit 9).
 | Tallene er for store (fx nøgletal × 365) eller tomme | Forkert relation eller ændrede Performance Options. Tjek de ti relationer mod data-model, og sæt alle Performance Options tilbage til Many / Many og Some records match |
 | Et land ændrer belægning eller barsalg | Filteret eller Use as Filter-handlingen rammer for mange ark. Ret dem efter afsnit 6.2 og 6.3 |
 | Ingen New Base Table, Tableau vil ikke relatere to fakta til samme dimension, eller extractet fejler med "No such table" | Tableau er ældre end 2024.2.1. Multi-fact-modellen kom i 2024.2, og "No such table" ved extract er rettet i 2024.2.1. Tjek Help → About Tableau, og opgradér (research R9) |
-| Landene står som "Unknown" på kortet | `countryCode` har ikke rollen Country/Region, eller den er sat på `country` (danske navne genkendes ikke altid). Sæt rollen på `countryCode` (afsnit 4) |
+| Landene står som "Unknown" på kortet, eller Kina eller Schweiz mangler | Rollen Country/Region sidder ikke på `iso3`. På `countryCode` kan Tableau læse koden som FIPS 10 (`CN` = Comorerne), og danske navne i `country` genkendes ikke altid. Sæt rollen på `iso3` (afsnit 4). Mangler `iso3`, så kør `docker compose down -v` og `docker compose up --build` |
 | Refresh All Extracts tager lang tid, timer ud eller får Tableau til at lukke | Værelsesnætter (1,3 mio. rækker), barsalg (408.000) og bookinger (234.000) hentes i sin helhed ved hver opdatering. Slå paginering til (afsnit 3.1). Mål tiden med `curl -s -o /dev/null -w '%{time_total}\n' -H "Authorization: Bearer $BI_API_KEY" http://localhost:3000/api/analytics/bar-sales`. Hæv connectorens timeout i forbindelsesindstillingerne **(tjek i jeres Tableau-version)**. Brug ikke extract-filtre: de virker pr. tabel og ikke på tværs i multi-fact (research R9) |
 | Opdateringen fejler, fordi API'et er nede | Forventet. Dashboardet beholder de seneste data og det gamle "Data opdateret" (research R7). Start backend, og opdatér igen |
 
