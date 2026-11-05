@@ -98,7 +98,8 @@ når workbooken bygges.
   - Indlejret JSON (fx `{ booking, nights: [...] }`): det er uklart, hvordan connectoren
     flader indlejrede arrays ud, og det giver ikke nogen gevinst.
   - Paginering: unødvendig ved denne datamængde (YAGNI). Connectoren understøtter
-    offset/limit, hvis det bliver nødvendigt.
+    offset/limit, hvis det bliver nødvendigt. *Ændret 2026-11-05: med data fra 2000 er der 1,3
+    mio. værelsesnætter, så de store fakta pagineres (006 FR-012).*
 
 ## R4. Hvor formlerne bor (KB-A4, FR-011, constitution III)
 

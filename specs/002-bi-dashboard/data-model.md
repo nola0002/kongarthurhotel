@@ -95,7 +95,7 @@ sæsonperioderne, bookingernes `check_in`/`check_out` og barsalgenes datoer (res
 
 | Faktatabel (Tableau-navn) | Endpoint | Én række pr. | Nøgler til dimensioner | Mål og øvrige felter |
 |---|---|---|---|---|
-| Værelsesnætter | `/analytics/room-nights` | solgt værelsesnat | `date`, `roomType`, `countryCode` | `bookingId`, `revenue` |
+| Værelsesnætter | `/analytics/room-nights` | solgt værelsesnat | `date`, `roomType`, `countryCode` | `revenue` |
 | Belægning | `/analytics/occupancy` | dato × værelsestype | `date`, `roomType` | `availableRoomNights`, `soldRoomNights`, `occupancyRate` |
 | Bookinger | `/analytics/bookings` | booking | `checkIn`, `roomType`, `countryCode` | `bookingId`, `checkOut`, `guestCount`, `nights`, `revenue`, `satisfactionScore` |
 | Barsalg | `/analytics/bar-sales` | barsalg | `date` | `saleId`, `drink`, `category`, `quantity`, `revenue` |
@@ -105,8 +105,8 @@ sæsonperioderne, bookingernes `check_in`/`check_out` og barsalgenes datoer (res
 Kundetilfredshed tæller i afrejseåret (003 research R8). Arket Kundetilfredshed bygges derfor
 fra Nøgletal og ikke fra Bookinger, så tallet altid er lig `/analytics/kpis`.
 
-`bookingId` på Værelsesnætter er kun en identifikation. Den relateres **ikke** til Bookinger,
-fordi to fakta aldrig relateres (det ville give en cyklus, research R8).
+Værelsesnætter har ikke `bookingId` (006 FR-014). To fakta relateres aldrig, fordi det ville
+give en cyklus (research R8), så feltet blev ikke brugt.
 
 ### Relationer i Tableau
 
@@ -162,7 +162,7 @@ fordeling af indtjening (FR-003–FR-006, FR-015). Natten `d` tilhører bookinge
 
 | Felt | Afledt af |
 |---|---|
-| `bookingId` | `bookings.id` |
+| ~~`bookingId`~~ | Fjernet 2026-11-05 (006 FR-014). Bruges ikke i Tableau |
 | `date` | Nattens dato |
 | ~~`year`, `month`~~ | Fjernet 2026-10-30. Kalender via `date`, så ophold over års- og månedsskifte stadig fordeles rigtigt |
 | ~~`season`~~ | Fjernet 2026-10-30. Kalender via `date` |

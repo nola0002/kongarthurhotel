@@ -42,6 +42,20 @@ Brugeren bad om at køre kravændringen igennem uden afklaringsrunde. Valgene ne
 - Q: Skal MySQL fortsat understøttes som alternativ? → A: Nej. Der er én database. To
   understøttede databaser ville være en abstraktion uden et krav bag (constitution VI).
 
+### Session 2026-11-05
+
+Tableau's REST API-connector crasher eller er meget lang tid om at opdatere extractet. API'et
+svarer på 5 s for alle otte tabeller, men connectoren skal læse ca. 240 MB JSON, heraf 139 MB i
+ét svar fra `room-nights` (1,3 mio. rækker). Brugeren har godkendt tre ændringer af
+BI-kontrakten. Det er en undtagelse fra FR-003 og gælder kun `/analytics`.
+
+- Q: Hvordan undgår vi, at Tableau skal læse en hel tabel på én gang? → A: Med paginering via
+  `offset` og `limit` på de tre store faktatabeller, som connectoren understøtter. Uden
+  parametrene er svaret som før (brugeren).
+- Q: Hvordan bliver svarene mindre? → A: Med gzip, når klienten sender
+  `Accept-Encoding: gzip`, og ved at fjerne `bookingId` fra værelsesnætterne, fordi Tableau
+  ikke bruger feltet (002 data-model, brugeren).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Receptionen arbejder uændret efter skiftet (Priority: P1)
@@ -186,6 +200,13 @@ henviser til denne spec. Ingen af dem kræver længere MySQL.
   sæsoner, priser, drinks) får intet ekstra indeks.
 - **FR-011**: Forespørgsler, der målbart er langsomme på startdatasættet, MUST forbedres uden at
   ændre resultatet. Nøgletal MUST stadig beregnes og ikke gemmes (A4).
+- **FR-012**: `/analytics/room-nights`, `/analytics/bookings` og `/analytics/bar-sales` MUST
+  kunne læses i sider med `offset` og `limit`. Siderne MUST tilsammen give præcis de samme rækker
+  som svaret uden parametre (kravændring 2026-11-05).
+- **FR-013**: Alle `/analytics`-tabeller MUST sendes gzip-komprimeret, når klienten accepterer
+  det.
+- **FR-014**: `/analytics/room-nights` MUST ikke have `bookingId`. Værelsesnætter relateres kun
+  til dimensionerne (002 data-model).
 
 ### Key Entities
 
