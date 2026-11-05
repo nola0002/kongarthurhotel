@@ -1,4 +1,4 @@
-# Skærme og flows – Kong Arthur back office
+# Skærme og flows – InnSights back office (Hotel Kong Arthur)
 
 Hver skærm henviser til kravene i `specs/001-backoffice-bookinger/spec.md` (Oversigt og
 Belægningsplan til `specs/003-receptionsoverblik/spec.md`). Feature 005

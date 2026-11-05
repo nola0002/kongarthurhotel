@@ -31,7 +31,7 @@ export default function Login() {
       <div className="grid place-items-center px-4 py-10">
         <form onSubmit={onSubmit} className="w-full max-w-[400px] space-y-5">
           <div>
-            <p className="text-xl font-semibold tracking-[-0.02em]">Kong Arthur</p>
+            <img src="/innsights.svg" alt="InnSights" className="h-7" />
             <h1 className="mt-6 text-3xl font-semibold tracking-[-0.03em]">Log ind</h1>
           </div>
           <ErrorBanner error={error} />

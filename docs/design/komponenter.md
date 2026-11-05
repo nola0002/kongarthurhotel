@@ -126,7 +126,7 @@ Kilde: `Shell.jsx`. Kun desktop, der er ingen mobilvisning.
 
 - Ramme: `grid h-dvh grid-cols-[264px_1fr] overflow-hidden`.
 - Sidebar: `flex flex-col px-4 py-5` på `paper`, oppefra:
-  - Ordmærke "Kong Arthur": `text-xl font-semibold tracking-[-0.02em]`.
+  - Ordmærket InnSights som billede: `frontend/public/innsights.svg`, `h-6`.
   - Søgefelt "Søg … ⌘K" (`bg-surface shadow-panel`), der åbner kommandopaletten (se § Kommandopalet).
   - Navigation i to grupper med en lille gruppetitel (`NAV` i `Shell.jsx`, 005 FR-017):
     **Reception**: Oversigt (`House`), Belægningsplan (`CalendarDots`), Bookinger (`Bed`).

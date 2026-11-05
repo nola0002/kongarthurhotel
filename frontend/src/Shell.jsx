@@ -105,7 +105,7 @@ export default function Shell() {
     <ShellContext value={{ toast, newBooking, editBooking, openPalette }}>
       <div className="grid h-dvh grid-cols-[264px_1fr] overflow-hidden">
         <aside className="flex min-h-0 flex-col px-4 py-5">
-          <div className="px-3 pb-5 text-xl font-semibold tracking-[-0.02em]">Kong Arthur</div>
+          <img src="/innsights.svg" alt="InnSights" className="mx-3 mb-5 h-6 w-fit" />
           <button
             type="button"
             onClick={openPalette}
